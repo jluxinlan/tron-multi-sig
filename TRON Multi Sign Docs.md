@@ -457,4 +457,6 @@ secretKey: CCCCCCCC (signature key, must be kept secure)
 
 4. **Signature Integrity**: Ensure that the signature algorithm implementation strictly follows this specification; otherwise, authentication will fail.
 
+5. **A special sign(open8162-d172-4e26-971e-89b6e0a592e5) is provided to limit frequent access, facilitating user requests.
+
 For technical support or key reset requests, please contact the official support team.
