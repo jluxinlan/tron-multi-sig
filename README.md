@@ -1,70 +1,184 @@
-# Developer Guide for Integrating TRON Multisignature Wallets
+# TRON Multisignature Wallet Integration Guide
 
-## Overview of the Multisignature Service
+> **This is a demo implementation, not a production-ready SDK.**  
+> It demonstrates how to integrate with the TRON multisignature service in both Node.js and browser environments.  
+> **Important:** Use this as a reference only. For production, always keep your secrets on the backend.
 
-The TRON multisignature service allows users to submit an initial transaction and guides multiple participants to sign asynchronously. Once the accumulated signature weight meets the predefined threshold, the system automatically broadcasts the transaction, simplifying complex multisignature workflows.
+---
+
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Core Functions & Usage](#core-functions--usage)
+- [Multisignature Transaction Flow](#multisignature-transaction-flow)
+- [API List](#api-list)
+- [API Authentication Specification](#api-authentication-specification)
+- [Security Warning](#security-warning)
+- [License](#license)
+
+---
+
+## Project Overview
+
+This project demonstrates how to integrate with the TRON multisignature service, including basic API usage and WebSocket real-time monitoring, in both Node.js and browser (React) environments.
+
+---
+
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Configure Environment
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```env
+BASE_URL=https://niletest.tronlink.org
+SECRET_ID=your-secret-id-here
+SECRET_KEY=your-secret-key-here
+CHANNEL=your-channel
+TEST_ADDRESS=TYourTestAddressHere
+```
+
+### 3. Run Examples
+
+#### Node.js Examples
+
+```bash
+# Basic API usage: query permissions, submit transaction, query transaction list
+pnpm example:basic
+
+# WebSocket real-time listener: receive pending transactions
+pnpm example:websocket
+```
+
+#### Web React Example
+
+```bash
+# Start development server with hot reload at http://localhost:3000
+pnpm web:dev
+```
+
+The web demo provides a graphical interface to:
+- Query address permissions
+- Submit multisignature transactions
+- View transaction lists
+- WebSocket real-time monitoring
+
+---
+
+## Features
+
+- Query multisignature permissions for an address
+- Submit multisignature transactions
+- Query transaction lists
+- Real-time monitoring of pending transactions via WebSocket
+
+---
+
+## Core Functions & Usage
+
+> For more details, see [`examples/node/basic-usage.ts`](examples/node/basic-usage.ts) and [`examples/node/websocket-demo.ts`](examples/node/websocket-demo.ts).
+
+### 1. Initialize the Client
+
+```ts
+import { MultiSigClient } from './src/services/MultiSigClient';
+
+const client = new MultiSigClient({
+  baseUrl: process.env.BASE_URL,
+  secretId: process.env.SECRET_ID,
+  secretKey: process.env.SECRET_KEY,
+  channel: process.env.CHANNEL,
+});
+```
+
+### 2. Query Address Permissions
+
+```ts
+const permissions = await client.getAddressPermission(process.env.TEST_ADDRESS);
+console.log('Permission Info:', permissions);
+```
+
+### 3. Submit Multisignature Transaction
+
+```ts
+const txResult = await client.submitTransaction({
+  from: process.env.TEST_ADDRESS,
+  to: 'Txxxxxxx',
+  amount: 1000000,
+  memo: 'Test transfer'
+});
+console.log('Transaction Result:', txResult);
+```
+
+### 4. Query Transaction List
+
+```ts
+const txList = await client.getTransactionList(process.env.TEST_ADDRESS, { limit: 10 });
+console.log('Transaction List:', txList);
+```
+
+### 5. WebSocket Real-Time Monitoring
+
+```ts
+const ws = client.createWebSocket(process.env.TEST_ADDRESS);
+
+ws.on('pending', (tx) => {
+  console.log('Pending Transaction:', tx);
+});
+
+ws.on('error', (err) => {
+  console.error('WebSocket Error:', err);
+});
+```
+
+---
 
 ## Multisignature Transaction Flow
 
 ### I. Constructing a Multisignature Transaction and Submitting It to the Service
 
-#### (1) Query Multisignature Authorization Details for the Current Address
+1. **Query Multisignature Authorization Details for the Current Address**  
+   Call the `/openapi/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
 
-You can call the `/openapi/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
+2. **Construct and Sign the Transaction**  
+   Based on business requirements, the user constructs a transaction object (`Transaction`) using the `owner_address`, and then signs the transaction with the current address.
 
-#### (2) Construct and Sign the Transaction
-
-Based on business requirements, the user constructs a transaction object (`Transaction`) using the `owner_address`, and then signs the transaction with the current address.
-
-#### (3) Submit the Transaction
-
-Call the `/openapi/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
+3. **Submit the Transaction**  
+   Call the `/openapi/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
 
 ### II. Query Pending Transactions, Sign, and Submit
 
-#### (1) Query Pending Transactions
+1. **Query Pending Transactions**  
+   Establish a WebSocket connection via `/openapi/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
 
-Establish a WebSocket connection via `/openapi/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
+2. **Sign and Submit the Transaction**  
+   After signing, submit the transaction object again through `/openapi/multi/transaction`. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
 
-#### (2) Sign and Submit the Transaction
+---
 
-After signing, submit the transaction object again through `/openapi/multi/transaction`. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
+## API List
 
-# API List
+> **All APIs require authentication. Refer to [API Authentication Specification](#api-authentication-specification) for authentication details.**
 
-### **All APIs require authentication. Refer to [[API Authentication Specification]](#api-authentication-specification) for authentication details.**
+### 1. Query Multisignature Authorization Details
 
-## 1. Query Multisignature Authorization Details
+- **API Name:** Address Permission Query
+- **API Endpoint:** `GET /openapi/multi/auth`
+- **Request Parameters:**
 
-### API Name
+| Parameter | Type   | Required | Description                                 | Example                          |
+|-----------|--------|----------|---------------------------------------------|----------------------------------|
+| address   | string | Yes      | Current address (query addresses it controls) | TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7 |
 
-Address Permission Query
-
-### API Endpoint
-
-GET /openapi/multi/auth (Optional; users may input any address they control)
-
-### Request Parameters
-
-| **Parameter** | **Type** | **Required** | **Description**                                | **Example**                         |
-|---------------|----------|--------------|------------------------------------------------|-------------------------------------|
-| address       | string   | Yes          | Current address (query addresses it controls)  | TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7  |
-
-### Response Fields
-
-| **Field**             | **Type** | **Description**                                          |
-|-----------------------|----------|----------------------------------------------------------|
-| code                  | int      | Status code (0 = success, non-zero = failure)            |
-| message               | string   | Status message                                           |
-| data                  | array    | Permission list                                          |
-| ├─ owner_address      | string   | Associated address                                       |
-| ├─ owner_permission   | object   | Owner permission of the associated address               |
-| │ ├─ operations       | string   | Allowed operation codes (empty means full permission)    |
-| │ ├─ threshold        | int      | Permission threshold (minimum signature weight required) |
-| │ ├─ weight           | int      | Weight of the current address                            |
-| └─ active_permissions | array    | Active permissions of the associated address             |
-
-### Response Example
+- **Response Example:**
 
 ```json
 {
@@ -90,22 +204,16 @@ GET /openapi/multi/auth (Optional; users may input any address they control)
 }
 ```
 
-## 2. Construct and Submit a Multisignature Transaction
+### 2. Construct and Submit a Multisignature Transaction
 
-### API Name
-
-Multisignature Transaction Submission
-
-### API Endpoint
-
-POST /openapi/multi/transaction
-
-### Request Body Example
+- **API Name:** Multisignature Transaction Submission
+- **API Endpoint:** `POST /openapi/multi/transaction`
+- **Request Body Example:**
 
 ```json
 {
   "address": "TE4CeJSjLmBsXQva3F1HXvAbdAP71Q2Ucw",
-  "function_selector":"transfer(address,uint256)",  // For TriggerSmartContract transactions, this field specifies the actual smart contract method, which is used to parse the parameter data.
+  "function_selector":"transfer(address,uint256)",
   "transaction": {    
     "raw_data": {
       "ref_block_bytes": "ded4",
@@ -134,51 +242,32 @@ POST /openapi/multi/transaction
       "timestamp": 1765948176000,
       "fee_limit": null
     },
-    "signature": ["659143f51bea6f0b16ce1e5f98a662cf086eb033ce9a17fb204cdbdfa34ba75448af68e3ba746eddd53b552e70e5dbd4273b6bd649ae493361dddb28ad72b53800"
-    ]
+    "signature": ["659143f51bea6f0b16ce1e5f98a662cf086eb033ce9a17fb204cdbdfa34ba75448af68e3ba746eddd53b552e70e5dbd4273b6bd649ae493361dddb28ad72b53800"]
   }
 }
 ```
 
-### Key Field Descriptions
+### 3. Pending Transaction Listener (WebSocket)
 
-| **Field**             | **Type** | **Description**                                          |
-|-----------------------|----------|----------------------------------------------------------|
-| address               | string   | Address initiating the transaction                       |
-| function_selector     | string   | Smart contract method (required when invoking contracts) |
-| transaction.raw_data  | object   | Raw transaction data compliant with blockchain protocol  |
-| transaction.signature | array    | Signature list (signatures appended sequentially)        |
+- **API Name:** Real-Time Pending Transaction Listener
+- **API Endpoint:** `GET /openapi/multi/socket`
+- **Protocol:** WebSocket
 
-## 3. Pending Transaction Listener (WebSocket)
+- **Connection Flow:**
+  1. Authentication: Client includes valid authentication parameters in the HTTP request URL.
+  2. Connection establishment: After validation, the client sends the current operating address to subscribe.
+  3. Data exchange: The server pushes pending transactions and transaction status updates.
 
-### API Name
-
-Real-Time Pending Transaction Listener
-
-### API Endpoint
-
-GET /openapi/multi/socket
-
-### Protocol
-
-WebSocket
-
-### Connection Flow
-
-1. Authentication: Client includes valid authentication parameters in the HTTP request URL.
-2. Connection establishment: After validation, the client sends the current operating address to subscribe.
-3. Data exchange: The server pushes pending transactions and transaction status updates.
-
-### Response Example
+- **Response Example:**
 
 ```json
 {
-    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ"，// Subscribe to pending transactions awaiting signature; subscribe to transaction status updates.
+    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ",
     "version":"v1"
 }
 ```
 
-### Response Example
+- **Push Example:**
 
 ```json
 [
@@ -239,49 +328,33 @@ WebSocket
                 "timestamp": 1741857918000,
                 "fee_limit": null
             },
-            "signature": ["3a53f8f5e4ed22a49a32e797d8ec9ed9dee4cd2dba8f00ee882a51bfd6691d94113a3f886f992803c191e38f59973f2b6521a7bea5235ee57eb86e3b757b4d9c1B","0e586c656a95450de017c67da4b78e8639e2537873b8b8ed6a3b39bce875724f548ac0e0f3e5fe4bd6bc395b10672c51f12598bc0835ac8f673c54c8b3e4ad0f1B"],
+            "signature": [
+                "3a53f8f5e4ed22a49a32e797d8ec9ed9dee4cd2dba8f00ee882a51bfd6691d94113a3f886f992803c191e38f59973f2b6521a7bea5235ee57eb86e3b757b4d9c1B",
+                "0e586c656a95450de017c67da4b78e8639e2537873b8b8ed6a3b39bce875724f548ac0e0f3e5fe4bd6bc395b10672c51f12598bc0835ac8f673c54c8b3e4ad0f1B"
+            ],
             "raw_data_hex": "0a023e9622086c2afde05160d13940b0d0e39fd9325a69080112630a2d747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e5472616e73666572436f6e747261637412320a15419f2e05d49b5fe66dce55598984aace7b3dc45fb012154180358ff232c17134b914a71b346a647dad006dfe18c0843d280370b098caf6d832"
         },
         "state": 1,
         "function_selector": "transfer(address,uint256)"
     }
 ]
-
 ```
 
-## 4. Transaction List Query
+### 4. Transaction List Query
 
-### API Name
+- **API Name:** Multisignature Transaction History Query
+- **API Endpoint:** `GET /openapi/multi/list`
+- **Request Parameters:**
 
-Multisignature Transaction History Query
+| Parameter | Type    | Required | Description                                                                    |
+|-----------|---------|----------|--------------------------------------------------------------------------------|
+| address   | string  | Yes      | Current address                                                                |
+| start     | int     | Yes      | Pagination start index (if limit=10, page 2 start=10)                          |
+| limit     | int     | Yes      | Pagination limit (max 100)                                                     |
+| is_sign   | boolean | No       | Filter by own signature (true = signed; false = unsigned, default false)       |
+| state     | int     | Yes      | Filter by transaction status (0 = processing; 1 = success; 2 = failure; 255 = all) |
 
-### API Endpoint
-
-GET /openapi/multi/list
-
-### Request Parameters
----------------------------------------------------------------------------------------------------------------
-| **Parameter** | **Type** | **Required** | **Description**                                                                    |
-|:--------------|:---------|:-------------|:-----------------------------------------------------------------------------------|
-| address       | string   | Yes          | Current address                                                                    |
-| start         | int      | Yes          | Pagination start index (if limit=10, page 2 start=10)                              |
-| limit         | int      | Yes          | Pagination limit (max 100)                                                         |
-| is_sign       | boolean  | No           | Filter by own signature (true = signed; false = unsigned, default false)           |
-| state         | int      | Yes          | Filter by transaction status (0 = processing; 1 = success; 2 = failure; 255 = all) |
----------------------------------------------------------------------------------------------------------------
-
-### Response Parameters
-------------------------------------------------------------------------------
-| **Field**        | **Type** | **Description**                                                 |
-|:-----------------|:---------|:----------------------------------------------------------------|
-| code             | int      | Status code                                                     |
-| message          | string   | Status message                                                  |
-| data.total       | int      | Total matching records                                          |
-| data.range_total | int      | Total in current page range                                     |
-| data.data        | array    | Array of transaction details (structure same as WebSocket push) |
-------------------------------------------------------------------------------
-
-### Response Example
+- **Response Example:**
 
 ```json
 {
@@ -372,91 +445,85 @@ GET /openapi/multi/list
                 },
                 "state": 0,
                 "function_selector": "transfer(address,uint256)"
-            },
+            }
         ]
     }
 }
 ```
 
-# **API Authentication Specification**
+---
 
-## I. Common Request Parameters
+## API Authentication Specification
+
+### I. Common Request Parameters
 
 All API requests must include the following common request fields, which are used for identity authentication, version identification, and request tracing:
 
----------------------------------------------------------------------------
-| **Name**     | **Type** | **Default / Description**                                                   |
-|:-------------|:---------|:----------------------------------------------------------------------------|
-| sign_version | string   | v1, currently only v1 is supported                                          |
-| ts           | long     | Current timestamp in milliseconds                                           |
-| address      | string   | TRON Base58 address representing the requesting account                     |
-| channel      | string   | Project name of the requester (defined during application, e.g. tronlink)   |
-| uuid         | string   | Unique request ID, randomly generated per request                           |
-| secret_id    | string   | Unique project identifier agreed with the multisignature service            |
-| sign         | string   | API signature used by the multisignature service to verify request validity |
----------------------------------------------------------------------------
+| Name        | Type   | Description                                                        |
+|-------------|--------|--------------------------------------------------------------------|
+| sign_version| string | v1, currently only v1 is supported                                 |
+| ts          | long   | Current timestamp in milliseconds                                  |
+| address     | string | TRON Base58 address representing the requesting account            |
+| channel     | string | Project name of the requester (defined during application)         |
+| uuid        | string | Unique request ID, randomly generated per request                  |
+| secret_id   | string | Unique project identifier agreed with the multisignature service   |
+| sign        | string | API signature used by the multisignature service to verify request |
 
-## II. API Request Signature (`sign`) Generation Rules
+### II. API Request Signature (`sign`) Generation Rules
 
-### **2.1 Signature Parameter Ordering**
+1. **Signature Parameter Ordering**  
+   Sort all common request parameters (excluding `sign`) in ascending ASCII order by field name, then concatenate them into a `key=value` string joined by `&`.
 
-Sort all common request parameters (excluding `sign`) in ascending ASCII order by field name, then concatenate them into a `key=value` string joined by `&`.
+   Example:
+   ```
+   address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
+   ```
 
-Example:
+2. **Construct the Signature Plaintext String**  
+   Format:
+   ```
+   HTTP_METHOD + Request_Path + ? + Concatenated_Parameter_String
+   ```
+   Example (GET request; WebSocket also uses GET):
+   ```
+   GET/openapi/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
+   ```
 
-```
-address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
-```
+3. **Generate the Signature Value**  
+   - Use the **HmacSHA256** algorithm, with the project’s assigned `secretKey` as the encryption key, to hash the signature plaintext string.
+   - Encode the resulting hash using **Base64** to obtain the final `sign` parameter value.
 
-### **2.2 Construct the Signature Plaintext String**
+### III. Key (`secretId` / `secretKey`) Application Process
 
-Format:
-
-```
-HTTP_METHOD + Request_Path + ? + Concatenated_Parameter_String
-```
-
-Example (GET request; WebSocket also uses GET):
-
-```
-GET/openapi/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
-```
-
-### **2.3 Generate the Signature Value**
-
-1. Use the **HmacSHA256** algorithm, with the project’s assigned `secretKey` as the encryption key, to hash the signature plaintext string.
-
-2. Encode the resulting hash using **Base64** to obtain the final `sign` parameter value.
-
-## III. Key (`secretId` / `secretKey`) Application Process
-
-### **3.1 Application Method**
-
-The official operators of the multisignature service will provide a [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1).  
-Applicants must fill in the project name, project details, and a contact email address in the form.
-
-### **3.2 Response Content**
-
-After approval, an email containing the following information will be sent:
+- The official operators of the multisignature service will provide a [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1).
+- Applicants must fill in the project name, project details, and a contact email address in the form.
+- After approval, an email containing the following information will be sent:
 
 ```
 channel: AAAA (project name of the requester)
-
 secretID: SSSSSS (unique project identifier)
-
 secretKey: CCCCCCCC (signature key, must be kept secure)
 ```
 
-## IV. Security Considerations
+### IV. Security Considerations
 
-1. **Key Confidentiality**: The `secretKey` is sensitive information and must be strictly protected to prevent leakage.
-
-2. **Timestamp Validation**: The server validates the request timestamp `ts`. It is recommended that clients synchronize time with an NTP server. The allowed time deviation must be within 5 minutes.
-
-3. **UUID Uniqueness**: Each request must generate a unique `uuid` to avoid business exceptions caused by duplicate requests.
-
-4. **Signature Integrity**: Ensure that the signature algorithm implementation strictly follows this specification; otherwise, authentication will fail.
-
-5. **A special sign(open8162-d172-4e26-971e-89b6e0a592e5)**： provided to limit frequent access, facilitating user requests.
+1. **Key Confidentiality:** The `secretKey` is sensitive information and must be strictly protected to prevent leakage.
+2. **Timestamp Validation:** The server validates the request timestamp `ts`. It is recommended that clients synchronize time with an NTP server. The allowed time deviation must be within 5 minutes.
+3. **UUID Uniqueness:** Each request must generate a unique `uuid` to avoid business exceptions caused by duplicate requests.
+4. **Signature Integrity:** Ensure that the signature algorithm implementation strictly follows this specification; otherwise, authentication will fail.
+5. **A special sign(open8162-d172-4e26-971e-89b6e0a592e5):** Provided to limit frequent access, facilitating user requests.
 
 For technical support or key reset requests, please contact the official support team.
+
+---
+
+## Security Warning
+
+⚠️ **Important:** This demo exposes secret keys in browser code. **Use for development/testing only.**  
+In production, always use a backend service to handle API calls and keep secrets secure.
+
+---
+
+## License
+
+Apache License 2.0
