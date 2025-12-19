@@ -526,4 +526,4 @@ In production, always use a backend service to handle API calls and keep secrets
 
 ## License
 
-Apache License 2.0
+tron multi sig is distributed under a MIT licence.
