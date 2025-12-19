@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
-import { MultiSigClient, TransactionDetail } from 'tron-multisig-demo';
+import { MultiSigClient, TransactionDetail } from 'tron-multisig';
 
 export interface ClientConfig {
   baseURL: string;

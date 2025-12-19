@@ -1,5 +1,5 @@
 {
-  "name": "tron-multisig-demo",
+  "name": "tron-multisig",
   "version": "1.0.0",
   "description": "TRON Multi-Signature Service Demo - Example implementation for wallet integration. Developers should build their own SDK based on this demo.",
   "main": "dist/index.js",
