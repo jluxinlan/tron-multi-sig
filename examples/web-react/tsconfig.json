@@ -21,7 +21,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "tron-multisig-demo": ["../../src/index.ts"]
+      "tron-multisig": ["../../src/index.ts"]
     }
   },
   "include": ["src"],

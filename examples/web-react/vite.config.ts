@@ -18,7 +18,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'tron-multisig-demo': path.resolve(__dirname, '../../src/index.ts')
+      'tron-multisig': path.resolve(__dirname, '../../src/index.ts')
     }
   },
   server: {
