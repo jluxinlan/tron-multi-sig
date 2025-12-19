@@ -1,0 +1,32 @@
+{
+  "name": "tron-multisig-demo",
+  "version": "1.0.0",
+  "description": "TRON Multi-Signature Service Demo - Example implementation for wallet integration. Developers should build their own SDK based on this demo.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "example:basic": "tsx examples/node/basic-usage.ts",
+    "example:websocket": "tsx examples/node/websocket-demo.ts",
+    "web:dev": "cd examples/web-react && pnpm dev"
+  },
+  "keywords": [
+    "tron",
+    "multisig",
+    "blockchain",
+    "wallet"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "1.13.2",
+    "dotenv": "17.2.3",
+    "uuid": "13.0.0",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.0",
+    "@types/ws": "8.18.1",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3"
+  }
+}

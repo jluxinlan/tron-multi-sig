@@ -1,0 +1,38 @@
+{
+  "app": {
+    "title": "TRON MultiSig Service Demo",
+    "subtitle": "React + TypeScript Implementation"
+  },
+  "config": {
+    "title": "Configuration",
+    "apiUrl": "API URL",
+    "secretId": "Secret ID",
+    "secretKey": "Secret Key",
+    "channel": "Channel",
+    "testAddress": "Test Address",
+    "placeholders": {
+      "apiUrl": "https://niletest.tronlink.org",
+      "secretId": "your-secret-id",
+      "secretKey": "your-secret-key",
+      "channel": "your-channel",
+      "testAddress": "TRON Address"
+    }
+  },
+  "actions": {
+    "queryAuth": "Query Auth",
+    "queryTransactions": "Query Transactions",
+    "connectWebSocket": "Connect WebSocket",
+    "disconnect": "Disconnect"
+  },
+  "common": {
+    "clear": "Clear",
+    "success": "Success",
+    "failed": "Failed"
+  },
+  "results": {
+    "title": "Results"
+  },
+  "websocket": {
+    "title": "WebSocket Real-time Log"
+  }
+}
