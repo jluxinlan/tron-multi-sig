@@ -1,11 +1,5 @@
 # TRON Multisignature Wallet Integration Guide
 
-> **This is a demo implementation, not a production-ready SDK.**  
-> It demonstrates how to integrate with the TRON multisignature service in both Node.js and browser environments.  
-> **Important:** Use this as a reference only. For production, always keep your secrets on the backend.
-
----
-
 ## Table of Contents
 
 - [Project Overview](#project-overview)
@@ -23,6 +17,11 @@
 ## Project Overview
 
 This project demonstrates how to integrate with the TRON multisignature service, including basic API usage and WebSocket real-time monitoring, in both Node.js and browser (React) environments.
+
+---
+> **This is a demo implementation, not a production-ready SDK.**  
+> It demonstrates how to integrate with the TRON multisignature service in both Node.js and browser environments.  
+> **Important:** Use this as a reference only. For production, always keep your secrets on the backend.
 
 ---
 
