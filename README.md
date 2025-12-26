@@ -43,11 +43,10 @@ SECRET_ID=your-secret-id-here
 SECRET_KEY=your-secret-key-here
 CHANNEL=your-channel
 TEST_ADDRESS=TYourTestAddressHere
-
+```
 BASE_URL in Test Environment: https://apinile.walletadapter.org
 BASE_URL in Online Environment: https://api.walletadapter.org
 
-```
 
 ### 3. Run Examples
 
