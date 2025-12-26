@@ -45,6 +45,7 @@ CHANNEL=your-channel
 TEST_ADDRESS=TYourTestAddressHere
 ```
 BASE_URL in Test Environment: https://apinile.walletadapter.org
+
 BASE_URL in Online Environment: https://api.walletadapter.org
 
 
