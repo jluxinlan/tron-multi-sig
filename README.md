@@ -1,4 +1,4 @@
-# TRON Multisignature Wallet Integration Guide
+# Developer Guide: Integrating TRON Multisig Service for Wallets
 
 ## Table of Contents
 
@@ -17,6 +17,12 @@
 ## Project Overview
 
 This project demonstrates how to integrate with the TRON multisignature service, including basic API usage and WebSocket real-time monitoring, in both Node.js and browser (React) environments.
+
+The TRON Multi-Signature Service is an application-layer multi-signature transaction service designed to manage permission verification, signature workflows, and execution control for multi-signature transactions without accessing private keys.
+
+Developers can submit a pending on-chain transaction through this service. Based on the pre-configured multi-signature permission rules of the account, the service collects and validates signatures from multiple participants and advances the multi-signature workflow asynchronously. Once the accumulated signature weight meets the threshold defined by the on-chain account, the system automatically broadcasts the transaction to the blockchain and completes its execution.
+
+The TRON Multi-Signature Service does not custody, generate, or use private keys. It is positioned as a keyless multi-signature transaction orchestration hub.
 
 ---
 > **This is a demo implementation, not a production-ready SDK.**  
@@ -152,7 +158,7 @@ ws.on('error', (err) => {
    Call the `/openapi/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
 
 2. **Construct and Sign the Transaction**  
-   Based on business requirements, the user constructs a transaction object (`Transaction`) using the `owner_address`, and then signs the transaction with the current address.
+   Based on business requirements, construct a transaction object (`Transaction`) using the `owner_address`, and then sign the transaction with the current address.
 
 3. **Submit the Transaction**  
    Call the `/openapi/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
@@ -250,6 +256,7 @@ ws.on('error', (err) => {
 }
 ```
 
+
 ### 3. Pending Transaction Listener (WebSocket)
 
 - **API Name:** Real-Time Pending Transaction Listener
@@ -257,15 +264,15 @@ ws.on('error', (err) => {
 - **Protocol:** WebSocket
 
 - **Connection Flow:**
-  1. Authentication: Client includes valid authentication parameters in the HTTP request URL.
-  2. Connection establishment: After validation, the client sends the current operating address to subscribe.
-  3. Data exchange: The server pushes pending transactions and transaction status updates.
+  1. Authentication: The client includes valid authentication parameters in the HTTP request URL.(The format is specified by the server and you can refer to [[API Authentication Specification]](#api-authentication-specification) for details)
+  2. Connection establishment: After validation, the client sends the current operating address for subscribe.
+  3. Data exchange: The server pushes pending transactions and transaction status updates for the client to sign as required. Multisign transactions involving the current address will also be pushed. The front end will determine whether the transaction is pending signing.
 
 - **Response Example:**
 
 ```json
 {
-    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ",
+    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ", // Subscribe to pending transactions awaiting signature; subscribe to transaction status updates.
     "version":"v1"
 }
 ```
@@ -352,9 +359,9 @@ ws.on('error', (err) => {
 | Parameter | Type    | Required | Description                                                                    |
 |-----------|---------|----------|--------------------------------------------------------------------------------|
 | address   | string  | Yes      | Current address                                                                |
-| start     | int     | Yes      | Pagination start index (if limit=10, page 2 start=10)                          |
+| start     | int     | Yes      | Pagination start index (if limit=10, then start=10 for Page 2 )                          |
 | limit     | int     | Yes      | Pagination limit (max 100)                                                     |
-| is_sign   | boolean | No       | Filter by own signature (true = signed; false = unsigned, default false)       |
+| is_sign   | boolean | No       | Filter by signed transactions of current address (true = signed; false = unsigned, default false)       |
 | state     | int     | Yes      | Filter by transaction status (0 = processing; 1 = success; 2 = failure; 255 = all) |
 
 - **Response Example:**
@@ -508,13 +515,23 @@ secretID: SSSSSS (unique project identifier)
 secretKey: CCCCCCCC (signature key, must be kept secure)
 ```
 
+- To facilitate integration testing for teams, a set of test credentials is provided. Please note that these credentials are subject to QPS limits and must not be used for high-frequency requests.
+```
+channel: test
+secret_id: TEST
+secret_key: TESTTESTTEST
+```
+
+- Mainnet Domain: api.walletadapter.org
+- Nile Testnet Domain:  apinile.walletadapter.org
+
+
 ### IV. Security Considerations
 
 1. **Key Confidentiality:** The `secretKey` is sensitive information and must be strictly protected to prevent leakage.
 2. **Timestamp Validation:** The server validates the request timestamp `ts`. It is recommended that clients synchronize time with an NTP server. The allowed time deviation must be within 5 minutes.
 3. **UUID Uniqueness:** Each request must generate a unique `uuid` to avoid business exceptions caused by duplicate requests.
 4. **Signature Integrity:** Ensure that the signature algorithm implementation strictly follows this specification; otherwise, authentication will fail.
-5. **A special sign(open8162-d172-4e26-971e-89b6e0a592e5):** Provided to limit frequent access, facilitating user requests.
 
 For technical support or key reset requests, please contact the official support team.
 
