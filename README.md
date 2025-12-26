@@ -38,11 +38,15 @@ pnpm install
 Copy `.env.example` to `.env` and fill in your credentials:
 
 ```env
-BASE_URL=https://niletest.tronlink.org
+BASE_URL=https://apinile.walletadapter.org
 SECRET_ID=your-secret-id-here
 SECRET_KEY=your-secret-key-here
 CHANNEL=your-channel
 TEST_ADDRESS=TYourTestAddressHere
+
+BASE_URL in Test Environment: https://apinile.walletadapter.org
+BASE_URL in Online Environment: https://api.walletadapter.org
+
 ```
 
 ### 3. Run Examples
