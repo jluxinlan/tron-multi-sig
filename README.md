@@ -155,21 +155,21 @@ ws.on('error', (err) => {
 ### I. Constructing a Multisignature Transaction and Submitting It to the Service
 
 1. **Query Multisignature Authorization Details for the Current Address**  
-   Call the `/openapi/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
+   Call the `/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
 
 2. **Construct and Sign the Transaction**  
    Based on business requirements, construct a transaction object (`Transaction`) using the `owner_address`, and then sign the transaction with the current address.
 
 3. **Submit the Transaction**  
-   Call the `/openapi/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
+   Call the `/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
 
 ### II. Query Pending Transactions, Sign, and Submit
 
 1. **Query Pending Transactions**  
-   Establish a WebSocket connection via `/openapi/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
+   Establish a WebSocket connection via `/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
 
 2. **Sign and Submit the Transaction**  
-   After signing, submit the transaction object again through `/openapi/multi/transaction`. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
+   After signing, submit the transaction object again through `/multi/transaction`. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
 
 ---
 
@@ -180,7 +180,7 @@ ws.on('error', (err) => {
 ### 1. Query Multisignature Authorization Details
 
 - **API Name:** Address Permission Query
-- **API Endpoint:** `GET /openapi/multi/auth`
+- **API Endpoint:** `GET /multi/auth`
 - **Request Parameters:**
 
 | Parameter | Type   | Required | Description                                 | Example                          |
@@ -216,7 +216,7 @@ ws.on('error', (err) => {
 ### 2. Construct and Submit a Multisignature Transaction
 
 - **API Name:** Multisignature Transaction Submission
-- **API Endpoint:** `POST /openapi/multi/transaction`
+- **API Endpoint:** `POST /multi/transaction`
 - **Request Body Example:**
 
 ```json
@@ -260,7 +260,7 @@ ws.on('error', (err) => {
 ### 3. Pending Transaction Listener (WebSocket)
 
 - **API Name:** Real-Time Pending Transaction Listener
-- **API Endpoint:** `GET /openapi/multi/socket`
+- **API Endpoint:** `GET /multi/socket`
 - **Protocol:** WebSocket
 
 - **Connection Flow:**
@@ -353,7 +353,7 @@ ws.on('error', (err) => {
 ### 4. Transaction List Query
 
 - **API Name:** Multisignature Transaction History Query
-- **API Endpoint:** `GET /openapi/multi/list`
+- **API Endpoint:** `GET /multi/list`
 - **Request Parameters:**
 
 | Parameter | Type    | Required | Description                                                                    |
@@ -496,7 +496,7 @@ All API requests must include the following common request fields, which are use
    ```
    Example (GET request; WebSocket also uses GET):
    ```
-   GET/openapi/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
+   GET/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
    ```
 
 3. **Generate the Signature Value**  
