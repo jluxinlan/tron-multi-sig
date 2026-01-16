@@ -185,7 +185,7 @@ ws.on('error', (err) => {
 
 | Parameter | Type   | Required | Description                                 | Example                          |
 |-----------|--------|----------|---------------------------------------------|----------------------------------|
-| address   | string | Yes      | Current address (query addresses it controls) | TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7 |
+| address   | string | Yes      | Current address (query addresses it controls) | TXz9dfkjui6pdegFCV1fSee96MWRwms6DB |
 
 - **Response Example:**
 
@@ -193,19 +193,57 @@ ws.on('error', (err) => {
 {
   "code": 0,
   "message": "OK",
+  "original_message": null,
   "data": [
     {
-      "owner_address": "TFDP1vFeSYPT6FUznL7zUjhg5X7p2AA8vw",
-      "owner_permission": {
-        "operations": "",
-        "threshold": 3,
-        "weight": 1
-      },
+      "owner_address": "TDqGdq76PDHrEXfEPMmNa2ayc7E4PKzfS1",
+      "owner_permission": null,
       "active_permissions": [
         {
-          "operations": "1620008000000000000000000000000000000000000000000000000000000000",
+          "operations": "77ff07c002600300000000000000000000000000000000000000000000000000",
+          "threshold": 66,
+          "weight": 35
+        },
+        {
+          "operations": "47ce000000000000000000000000000000000000000000000000000000000000",
+          "threshold": 6,
+          "weight": 2
+        },
+        {
+          "operations": "46da000000000000000000000000000000000000000000000000000000000000",
+          "threshold": 6,
+          "weight": 2
+        },
+        {
+          "operations": "121800c00220c101000000000000000000000000000000000000000000000000",
+          "threshold": 10,
+          "weight": 2
+        },
+        {
+          "operations": "77ff07c0027e0302000000000000000000000000000000000000000000000000",
+          "threshold": 100,
+          "weight": 40
+        },
+        {
+          "operations": "77ff07c0027e0300000000000000000000000000000000000000000000000000",
           "threshold": 8,
+          "weight": 2
+        }
+      ]
+    },
+    {
+      "owner_address": "TXz9dfkjui6pdegFCV1fSee96MWRwms6DB",
+      "owner_permission": null,
+      "active_permissions": [
+        {
+          "operations": "7fff1fc0033e0b00000000000000000000000000000000000000000000000000",
+          "threshold": 1,
           "weight": 1
+        },
+        {
+          "operations": "46fa01c002200100000000000000000000000000000000000000000000000000",
+          "threshold": 5,
+          "weight": 3
         }
       ]
     }
@@ -500,19 +538,18 @@ All API requests must include the following common request fields, which are use
    ```
 
 3. **Generate the Signature Value**  
-   - Use the **HmacSHA256** algorithm, with the project’s assigned `secretKey` as the encryption key, to hash the signature plaintext string.
+   - Use the **HmacSHA256** algorithm, with the project’s assigned `secret_key` as the encryption key, to hash the signature plaintext string.
    - Encode the resulting hash using **Base64** to obtain the final `sign` parameter value.
 
-### III. Key (`secretId` / `secretKey`) Application Process
+### III. Key (`secret_id` / `secret_key`) Application Process
 
-- The official operators of the multisignature service will provide a [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1).
-- Applicants must fill in the project name, project details, and a contact email address in the form.
-- After approval, an email containing the following information will be sent:
+- Please complete the following Google Form [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1) to request your SecretID and SecretKey. 
+- Once approved, you will receive an email containing the following details:
 
 ```
 channel: AAAA (project name of the requester)
-secretID: SSSSSS (unique project identifier)
-secretKey: CCCCCCCC (signature key, must be kept secure)
+secret_id: SSSSSS (unique project identifier)
+secret_key: CCCCCCCC (signature key, must be kept secure)
 ```
 
 - To facilitate integration testing for teams, a set of test credentials is provided. Please note that these credentials are subject to QPS limits and must not be used for high-frequency requests.
