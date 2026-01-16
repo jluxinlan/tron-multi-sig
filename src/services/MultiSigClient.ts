@@ -70,7 +70,7 @@ export class MultiSigClient {
    * 1. Query addresses and permissions controlled by current address
    */
   async queryAuth(address: string): Promise<AuthResponse> {
-    const path = '/openapi/multi/auth';
+    const path = '/multi/auth';
     const authParams = this.generateAuthQueryParams('GET', path, address);
 
     const response = await this.axiosInstance.get<AuthResponse>(path, {
@@ -87,7 +87,7 @@ export class MultiSigClient {
    * 2. Create and submit multi-signature transaction
    */
   async submitTransaction(params: SubmitTransactionParams): Promise<SubmitTransactionResponse> {
-    const path = '/openapi/multi/transaction';
+    const path = '/multi/transaction';
     const authParams = this.generateAuthQueryParams('POST', path, params.address);
 
     const response = await this.axiosInstance.post<SubmitTransactionResponse>(
@@ -105,7 +105,7 @@ export class MultiSigClient {
    * 3. Query transaction list
    */
   async queryTransactionList(params: TransactionListParams): Promise<TransactionListResponse> {
-    const path = '/openapi/multi/list';
+    const path = '/multi/list';
     const authParams = this.generateAuthQueryParams('GET', path, params.address);
 
     const response = await this.axiosInstance.get<TransactionListResponse>(path, {
@@ -124,12 +124,12 @@ export class MultiSigClient {
   async connectWebSocket(address: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = this.config.baseURL.replace(/^http/, 'ws') + '/openapi/multi/socket';
+        const wsUrl = this.config.baseURL.replace(/^http/, 'ws') + '/multi/socket';
 
         // Generate authentication parameters
         const authParams = generateAuthParams(
           'GET',
-          '/openapi/multi/socket',
+          '/multi/socket',
           address,
           this.config.channel,
           this.config.secretId,
