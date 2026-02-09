@@ -303,8 +303,9 @@ ws.on('error', (err) => {
 
 - **Connection Flow:**
   1. Authentication: The client includes valid authentication parameters in the HTTP request URL.(The format is specified by the server and you can refer to [[API Authentication Specification]](#api-authentication-specification) for details)
-  2. Connection establishment: After validation, the client sends the current operating address for subscribe.
-  3. Data exchange: The server pushes pending transactions and transaction status updates for the client to sign as required. Multisign transactions involving the current address will also be pushed. The front end will determine whether the transaction is pending signing.
+  2. Connection establishment: After validation, the client sends the current operating address for subscribe. The server will then return all pending transactions associated with that subscription address. The data structure for this message is a jsonArray.
+  3. Data exchange: The server will push new pending transactions and transaction status updates related to the subscribed address for the client to sign. The data structure for these pushed messages is a jsonObj. The front end is responsible for determining whether a transaction is in a "pending signature" state.
+  4. Connection Maintenance (Keep-Alive): To keep the connection active, the client must send a ping message: {"type": "ping"}. The interval between pings must be less than 60 seconds. If the connection is dropped, a reconnection is required.
 
 - **Response Example:**
 
