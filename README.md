@@ -216,14 +216,15 @@ All REST API responses follow this structure:
 
 ### Error Codes
 
-| Code | Description |
-|---|---|
-| 0 | Success |
-| 1001 | Authentication failed (invalid `sign`, expired `ts`, or invalid `secret_id`) |
-| 1002 | Invalid request parameters |
-| 1003 | Address not found or has no multisig permissions |
-| 1004 | Transaction validation failed |
-| 1005 | Duplicate request (`uuid` already used) |
+| Code  | Description                                                                 |
+|-------|-----------------------------------------------------------------------------|
+| 0     | Success                                                                     |
+| 4000  | `sign` authentication failed                                                |
+| 4002  | invalid `secret_id`                                                         |
+| 4003  | expired `ts`                                                                |
+| 4501  | Request too frequently                                                      |
+| 20004 | has no some param (`sign`, `ts`, `version`, `channel`, `uuid`, `secret_id`) |
+| 10001 | some server error                                                           |
 
 > **Note:** The error codes above are representative examples. Please refer to the actual API response for the specific error code and message in your integration.
 
