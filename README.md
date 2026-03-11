@@ -843,6 +843,26 @@ For technical support or key reset requests, please contact the official support
 
 ---
 
+## Enumerations Reference
+
+### Transaction State
+
+| Value | Description |
+|---|---|
+| `0` | Processing (pending signatures) |
+| `1` | Success (broadcasted to blockchain) |
+| `2` | Failure |
+| `255` | All (used only as a query filter in `/multi/list`) |
+
+### Signature Status (`is_sign`)
+
+| Value | Description |
+|---|---|
+| `0` | Not yet signed |
+| `1` | Signed |
+
+---
+
 ## Security Warning
 
 ⚠️ **Important:** This demo exposes secret keys in browser code. **Use for development/testing only.**  
