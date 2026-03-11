@@ -322,7 +322,7 @@ Returns an array of objects, each representing an `owner_address` that the queri
 </details>
 ---
 
-### 2. Construct and Submit a Multisignature Transaction
+### 2. Submit Multisignature Transaction
 
 **API Endpoint:** `POST /multi/transaction`
 
