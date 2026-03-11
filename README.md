@@ -7,8 +7,20 @@
 - [Features](#features)
 - [Core Functions & Usage](#core-functions--usage)
 - [Multisignature Transaction Flow](#multisignature-transaction-flow)
-- [API List](#api-list)
+- [API Reference](#api-reference)
+    - [Common Response Structure](#common-response-structure)
+    - [Error Codes](#error-codes)
+    - [1. Query Multisignature Authorization Details](#1-query-multisignature-authorization-details)
+    - [2. Submit Multisignature Transaction](#2-submit-multisignature-transaction)
+    - [3. Pending Transaction Listener (WebSocket)](#3-pending-transaction-listener-websocket)
+    - [4. Transaction List Query](#4-transaction-list-query)
 - [API Authentication Specification](#api-authentication-specification)
+    - [I. Common Request Parameters](#i-common-request-parameters)
+    - [II. How to Pass Authentication Parameters](#ii-how-to-pass-authentication-parameters)
+    - [III. API Request Signature Generation Rules](#iii-api-request-signature-generation-rules)
+    - [IV. Key Application Process](#iv-key-application-process)
+    - [V. Security Considerations](#v-security-considerations)
+- [Enumerations Reference](#enumerations-reference)
 - [Security Warning](#security-warning)
 - [License](#license)
 
@@ -22,14 +34,9 @@ The TRON Multi-Signature Service is an application-layer multi-signature transac
 
 Developers can submit a pending on-chain transaction through this service. Based on the pre-configured multi-signature permission rules of the account, the service collects and validates signatures from multiple participants and advances the multi-signature workflow asynchronously. Once the accumulated signature weight meets the threshold defined by the on-chain account, the system automatically broadcasts the transaction to the blockchain and completes its execution.
 
-The TRON Multi-Signature Service does not custody, generate, or use private keys. It is positioned as a keyless multi-signature transaction orchestration hub.
+> **The TRON Multi-Signature Service does not custody, generate, or use private keys. It is positioned as a keyless multi-signature transaction orchestration hub.**
 
----
-> **This is a demo implementation, not a production-ready SDK.**  
-> It demonstrates how to integrate with the TRON multisignature service in both Node.js and browser environments.  
-> **Important:** Use this as a reference only. For production, always keep your secrets on the backend.
-
----
+> **Note:** This is a demo implementation, not a production-ready SDK. Use this as a reference only. For production, always keep your secrets on the backend.
 
 ## Quick Start
 
@@ -50,9 +57,11 @@ SECRET_KEY=your-secret-key-here
 CHANNEL=your-channel
 TEST_ADDRESS=TYourTestAddressHere
 ```
-BASE_URL in Test Environment: https://apinile.walletadapter.org
 
-BASE_URL in Online Environment: https://api.walletadapter.org
+| Environment | BASE_URL |
+|---|---|
+| Nile Testnet | `https://apinile.walletadapter.org` |
+| Mainnet | `https://api.walletadapter.org` |
 
 
 ### 3. Run Examples
@@ -152,7 +161,15 @@ ws.on('error', (err) => {
 
 ## Multisignature Transaction Flow
 
-### I. Constructing a Multisignature Transaction and Submitting It to the Service
+### Phase I. Constructing a Multisignature Transaction and Submitting It to the Service
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  1. Query Auth  │────▶│  2. Construct   │────▶│  3. Submit TX   │
+│  GET /multi/auth│     │  & Sign TX      │     │ POST /multi/    │
+│                 │     │  (client-side)  │     │   transaction   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
 
 1. **Query Multisignature Authorization Details for the Current Address**  
    Call the `/multi/auth` endpoint to retrieve all addresses over which the specified address has multisignature permissions. This step is intended to verify whether the current address has been properly authorized by the transaction initiator (i.e., the `owner_address`).
@@ -163,7 +180,15 @@ ws.on('error', (err) => {
 3. **Submit the Transaction**  
    Call the `/multi/transaction` endpoint to submit the transaction to the multisignature service for subsequent processing.
 
-### II. Query Pending Transactions, Sign, and Submit
+### Phase II. Query Pending Transactions, Sign, and Submit
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ 4. Listen for   │────▶│ 5. Sign the     │────▶│ 6. Submit via   │
+│ pending TX      │     │ pending TX      │     │ POST /multi/    │
+│ WS /multi/socket│     │ (client-side)   │     │   transaction   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
 
 1. **Query Pending Transactions**  
    Establish a WebSocket connection via `/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
@@ -177,18 +202,62 @@ ws.on('error', (err) => {
 
 > **All APIs require authentication. Refer to [API Authentication Specification](#api-authentication-specification) for authentication details.**
 
+
+### Common Response Structure
+
+All REST API responses follow this structure:
+
+| Field | Type | Description |
+|---|---|---|
+| `code` | int | Response code. `0` indicates success; non-zero indicates an error |
+| `message` | string | Human-readable response message |
+| `original_message` | string \| null | Original error message (if any) from upstream services |
+| `data` | object \| array | Response payload (structure varies by API) |
+
+### Error Codes
+
+| Code | Description |
+|---|---|
+| 0 | Success |
+| 1001 | Authentication failed (invalid `sign`, expired `ts`, or invalid `secret_id`) |
+| 1002 | Invalid request parameters |
+| 1003 | Address not found or has no multisig permissions |
+| 1004 | Transaction validation failed |
+| 1005 | Duplicate request (`uuid` already used) |
+
+> **Note:** The error codes above are representative examples. Please refer to the actual API response for the specific error code and message in your integration.
+
+---
 ### 1. Query Multisignature Authorization Details
 
-- **API Name:** Address Permission Query
-- **API Endpoint:** `GET /multi/auth`
+**API Endpoint:** `GET /multi/auth`
+**Description:** Query all addresses over which the specified address has multisignature permissions.
 - **Request Parameters:**
 
 | Parameter | Type   | Required | Description                                 | Example                          |
 |-----------|--------|----------|---------------------------------------------|----------------------------------|
-| address   | string | Yes      | Current address (query addresses it controls) | TXz9dfkjui6pdegFCV1fSee96MWRwms6DB |
+| `address`   | string | Yes      | TRON Base58 address to query | `TXz9dfkjui6pdegFCV1fSee96MWRwms6DB` |
 
-- **Response Example:**
+> Plus all [Common Request Parameters](#i-common-request-parameters) for authentication.
 
+Returns an array of objects, each representing an `owner_address` that the queried address has permissions over:
+
+| Field | Type | Description |
+|---|---|---|
+| `owner_address` | string | The account address that granted multisig permissions |
+| `owner_permission` | object \| null | Owner-level permission details (null if no owner permission) |
+| `active_permissions` | array | List of active permissions the queried address holds |
+
+**`active_permissions` Item:**
+| Field | Type | Description |
+|---|---|---|
+| `operations` | string | Hex-encoded bitmask of allowed contract types |
+| `threshold` | int | Total weight required to authorize a transaction |
+| `weight` | int | The queried address's weight in this permission group |
+
+
+<details>
+<summary><b>Response Example</b></summary>
 ```json
 {
   "code": 0,
@@ -250,13 +319,54 @@ ws.on('error', (err) => {
   ]
 }
 ```
+</details>
+---
 
 ### 2. Construct and Submit a Multisignature Transaction
 
-- **API Name:** Multisignature Transaction Submission
-- **API Endpoint:** `POST /multi/transaction`
-- **Request Body Example:**
+**API Endpoint:** `POST /multi/transaction`
 
+**Description:** Submit a signed transaction to the multisignature service. Can be used both for initial submission and for adding subsequent signatures to a pending transaction.
+
+**Authentication:** Common request parameters are passed as **query string parameters** in the URL. See [How to Pass Authentication Parameters](#ii-how-to-pass-authentication-parameters).
+
+**Request Body (`application/json`):**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `address` | string | Yes | The signer's TRON Base58 address (the address that produced this signature) |
+| `function_selector` | string | No | The smart contract function being called (e.g., `transfer(address,uint256)`). Required for `TriggerSmartContract` type |
+| `transaction` | object | Yes | The signed TRON transaction object (see below) |
+
+**`transaction` Object:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `raw_data` | object | Yes | Transaction raw data containing contract details |
+| `signature` | string[] | Yes | Array of hex-encoded signatures |
+
+**`raw_data` Object:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ref_block_bytes` | string | Reference block bytes |
+| `ref_block_hash` | string | Reference block hash |
+| `expiration` | long | Transaction expiration timestamp (ms) |
+| `contract` | array | Array of contract calls (typically one element) |
+| `timestamp` | long | Transaction creation timestamp (ms) |
+| `fee_limit` | long \| null | Maximum fee for smart contract execution (in SUN). Required for `TriggerSmartContract` |
+| `data` | string | Optional memo/note |
+
+**`contract` Item:**
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
+| `parameter` | object | Contract parameters containing `value` and `type_url` |
+| `Permission_id` | int | The permission ID used for this transaction |
+
+<details>
+<summary><b>Request Example</b></summary>
 ```json
 {
   "address": "TE4CeJSjLmBsXQva3F1HXvAbdAP71Q2Ucw",
@@ -294,20 +404,80 @@ ws.on('error', (err) => {
 }
 ```
 
+</details>
 
+---
 ### 3. Pending Transaction Listener (WebSocket)
 
-- **API Name:** Real-Time Pending Transaction Listener
-- **API Endpoint:** `GET /multi/socket`
-- **Protocol:** WebSocket
+**API Endpoint:** `GET /multi/socket`
 
-- **Connection Flow:**
-  1. Authentication: The client includes valid authentication parameters in the HTTP request URL.(The format is specified by the server and you can refer to [[API Authentication Specification]](#api-authentication-specification) for details)
-  2. Connection establishment: After validation, the client sends the current operating address for subscribe. The server will then return all pending transactions associated with that subscription address. The data structure for this message is a jsonArray.
-  3. Data exchange: The server will push new pending transactions and transaction status updates related to the subscribed address for the client to sign. The data structure for these pushed messages is a jsonObj. The front end is responsible for determining whether a transaction is in a "pending signature" state.
-  4. Connection Maintenance (Keep-Alive): To keep the connection active, the client must send a ping message: {"type": "ping"}. The interval between pings must be less than 60 seconds. If the connection is dropped, a reconnection is required.
+**Protocol:** WebSocket
 
-- **Response Example:**
+**Description:** Establish a real-time WebSocket connection to receive pending transaction notifications for a subscribed address.
+
+#### Connection Flow
+**Step 1 — Connect with Authentication:**
+Include all [Common Request Parameters](#i-common-request-parameters) (including `sign`) as query parameters in the WebSocket URL:
+
+```
+wss://apinile.walletadapter.org/multi/socket?address=TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8&sign=BASE64_ENCODED_SIGNATURE
+```
+
+**Step 2 — Subscribe:**
+After the connection is established, send a subscription message specifying the address to monitor:
+
+```json
+{
+  "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ",
+  "version": "v1"
+}
+```
+
+The server responds with all currently pending transactions as a **JSON Array**.
+
+**Step 3 — Receive Push Messages:**
+
+The server pushes new pending transactions and status updates as **individual JSON Objects**. The client is responsible for determining whether a transaction is in a "pending signature" state (check `is_sign` and `state` fields).
+
+**Step 4 — Keep-Alive:**
+
+Send a ping message at intervals of **less than 60 seconds** to keep the connection alive:
+
+```json
+{"type": "ping"}
+```
+
+If the connection drops, the client must reconnect.
+
+#### Push Data Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `hash` | string | Transaction hash |
+| `contract_type` | string | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
+| `originator_address` | string | The address that initiated the transaction (`owner_address`) |
+| `expire_time` | long | Transaction expiration time (0 if not set) |
+| `threshold` | int | Required total signature weight |
+| `current_weight` | int | Currently accumulated signature weight |
+| `is_sign` | int | Whether the subscribed address has signed (`0` = unsigned, `1` = signed) |
+| `signature_progress` | array | Signature status for each participant (see below) |
+| `contract_data` | object | Decoded contract parameters |
+| `current_transaction` | object | The current transaction object (for signing) |
+| `state` | int | Transaction state (`0` = processing, `1` = success, `2` = failure) |
+| `function_selector` | string | Smart contract function selector (if applicable) |
+
+**`signature_progress` Item:**
+
+| Field | Type | Description |
+|---|---|---|
+| `address` | string | Participant's TRON address |
+| `weight` | int | This participant's signature weight |
+| `is_sign` | int | Whether this participant has signed (`0` = no, `1` = yes) |
+| `sign_time` | long | Signing timestamp in seconds (`0` if not yet signed) |
+
+
+<details>
+<summary><b>Push Example (JSON Array on initial subscription)</b></summary>
 
 ```json
 {
@@ -388,22 +558,38 @@ ws.on('error', (err) => {
     }
 ]
 ```
+</details>
 
+---
 ### 4. Transaction List Query
 
-- **API Name:** Multisignature Transaction History Query
-- **API Endpoint:** `GET /multi/list`
-- **Request Parameters:**
+**API Endpoint:** `GET /multi/list`
 
-| Parameter | Type    | Required | Description                                                                    |
-|-----------|---------|----------|--------------------------------------------------------------------------------|
-| address   | string  | Yes      | Current address                                                                |
-| start     | int     | Yes      | Pagination start index (if limit=10, then start=10 for Page 2 )                          |
-| limit     | int     | Yes      | Pagination limit (max 100)                                                     |
-| is_sign   | boolean | No       | Filter by signed transactions of current address (true = signed; false = unsigned, default false)       |
-| state     | int     | Yes      | Filter by transaction status (0 = processing; 1 = success; 2 = failure; 255 = all) |
+**Description:** Query the multisignature transaction history for a given address with pagination and filtering.
 
-- **Response Example:**
+**Request Parameters (Query String):**
+
+| Parameter | Type | Required | Description | Default |
+|---|---|---|---|---|
+| `address` | string | Yes | TRON Base58 address to query | — |
+| `start` | int | Yes | Pagination offset (0-based). For page N with `limit` L, use `start = (N-1) * L` | — |
+| `limit` | int | Yes | Number of records per page (max: 100) | — |
+| `is_sign` | boolean | No | Filter by current address's signing status. `true` = signed, `false` = unsigned | `false` |
+| `state` | int | Yes | Filter by transaction state. See [Transaction State](#transaction-state) | — |
+
+> Plus all [Common Request Parameters](#i-common-request-parameters) for authentication.
+
+**Response `data` Field:**
+
+| Field | Type | Description |
+|---|---|---|
+| `total` | int | Total number of transactions matching the filter |
+| `range_total` | int | Total number of transactions across all states for this address |
+| `data` | array | Array of transaction objects (same structure as [WebSocket Push Data](#push-data-fields)) |
+
+
+<details>
+<summary><b>Response Example</b></summary>
 
 ```json
 {
@@ -500,6 +686,8 @@ ws.on('error', (err) => {
 }
 ```
 
+</details>
+
 ---
 
 ## API Authentication Specification
@@ -508,19 +696,39 @@ ws.on('error', (err) => {
 
 All API requests must include the following common request fields, which are used for identity authentication, version identification, and request tracing:
 
-| Name        | Type   | Description                                                        |
-|-------------|--------|--------------------------------------------------------------------|
-| sign_version| string | v1, currently only v1 is supported                                 |
-| ts          | long   | Current timestamp in milliseconds                                  |
-| address     | string | TRON Base58 address representing the requesting account            |
-| channel     | string | Project name of the requester (defined during application)         |
-| uuid        | string | Unique request ID, randomly generated per request                  |
-| secret_id   | string | Unique project identifier agreed with the multisignature service   |
-| sign        | string | API signature used by the multisignature service to verify request |
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `sign_version` | string | Yes | API version. Currently only `v1` is supported |
+| `ts` | long | Yes | Current timestamp in **milliseconds** |
+| `address` | string | Yes | TRON Base58 address of the requesting account |
+| `channel` | string | Yes | Project name of the requester (assigned during registration) |
+| `uuid` | string | Yes | Unique request ID, randomly generated per request (UUID v4 recommended) |
+| `secret_id` | string | Yes | Unique project identifier (assigned during registration) |
+| `sign` | string | Yes | HMAC-SHA256 signature for request verification (see [Generation Rules](#iii-api-request-signature-generation-rules)) |
 
-### II. API Request Signature (`sign`) Generation Rules
+### II. How to Pass Authentication Parameters
 
-1. **Signature Parameter Ordering**  
+| Request Type | How to Pass |
+|---|---|
+| **GET** (REST API) | All common parameters are appended as **query string** parameters |
+| **POST** (REST API) | All common parameters are appended as **query string** parameters in the URL; the request body contains only business data (`Content-Type: application/json`) |
+| **WebSocket** | All common parameters are appended as **query string** parameters in the WebSocket connection URL |
+
+**Example (POST request):**
+
+```
+POST /multi/transaction?address=TMf7f...&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-...&sign=BASE64_SIGNATURE
+Content-Type: application/json
+
+{
+  "address": "TE4CeJSjLmBsXQva3F1HXvAbdAP71Q2Ucw",
+  "transaction": { ... }
+}
+```
+
+### III. API Request Signature (`sign`) Generation Rules
+
+#### Step 1: Sort and Concatenate Parameters
    Sort all common request parameters (excluding `sign`) in ascending ASCII order by field name, then concatenate them into a `key=value` string joined by `&`.
 
    Example:
@@ -528,48 +736,108 @@ All API requests must include the following common request fields, which are use
    address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
    ```
 
-2. **Construct the Signature Plaintext String**  
+#### Step 2: Construct the Signature Plaintext String 
    Format:
    ```
-   HTTP_METHOD + Request_Path + ? + Concatenated_Parameter_String
+   {HTTP_METHOD}{Request_Path}?{Concatenated_Parameter_String}
    ```
    Example (GET request; WebSocket also uses GET):
    ```
    GET/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
    ```
 
-3. **Generate the Signature Value**  
-   - Use the **HmacSHA256** algorithm, with the project’s assigned `secret_key` as the encryption key, to hash the signature plaintext string.
-   - Encode the resulting hash using **Base64** to obtain the final `sign` parameter value.
+> **Note:** There is no space or separator between `HTTP_METHOD` and `Request_Path`.
 
-### III. Key (`secret_id` / `secret_key`) Application Process
-
-- Please complete the following Google Form [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1) to request your SecretID and SecretKey. 
-- Once approved, you will receive an email containing the following details:
+**Example for GET request:**
 
 ```
-channel: AAAA (project name of the requester)
-secret_id: SSSSSS (unique project identifier)
-secret_key: CCCCCCCC (signature key, must be kept secure)
+GET/multi/auth?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
 ```
 
-- To facilitate integration testing for teams, a set of test credentials is provided. Please note that these credentials are subject to QPS limits and must not be used for high-frequency requests.
+**Example for POST request:**
+
 ```
-channel: test
-secret_id: TEST
-secret_key: TESTTESTTEST
+POST/multi/transaction?address=TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7&channel=AAAA&secret_id=SSSSSS&sign_version=v1&ts=174592188000&uuid=a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8
 ```
 
-- Mainnet Domain: api.walletadapter.org
-- Nile Testnet Domain:  apinile.walletadapter.org
+> **Important:** The POST request body is **NOT** included in the signature calculation. Only the query string parameters participate in signing.
+
+#### Step 3: Generate the Signature Value
+1. Use the **HMAC-SHA256** algorithm with your assigned `secret_key` as the key
+2. Hash the plaintext string from Step 2
+3. **Base64-encode** the resulting hash to produce the final `sign` value
+
+**Pseudocode:**
+
+```
+sign = Base64( HMAC-SHA256( secret_key, plaintext_string ) )
+```
+
+**JavaScript Example:**
+
+```javascript
+import crypto from 'crypto';
+
+function generateSign(method, path, params, secretKey) {
+  // Step 1: Sort and concatenate
+  const sortedKeys = Object.keys(params).sort();
+  const queryString = sortedKeys.map(k => `${k}=${params[k]}`).join('&');
+
+  // Step 2: Construct plaintext
+  const plaintext = `${method}${path}?${queryString}`;
+
+  // Step 3: HMAC-SHA256 + Base64
+  const hmac = crypto.createHmac('sha256', secretKey);
+  hmac.update(plaintext);
+  return hmac.digest('base64');
+}
+
+// Usage
+const sign = generateSign('GET', '/multi/auth', {
+  address: 'TMf7fBmKPDGVP8b6UrEu1t6oDBRnNgwTt7',
+  channel: 'AAAA',
+  secret_id: 'SSSSSS',
+  sign_version: 'v1',
+  ts: '174592188000',
+  uuid: 'a6e4563f-1ce4-4a8f-ba37-de1cc121b4f8'
+}, 'YOUR_SECRET_KEY');
+```
 
 
-### IV. Security Considerations
+### IV. Key (`secret_id` / `secret_key`) Application Process
 
-1. **Key Confidentiality:** The `secretKey` is sensitive information and must be strictly protected to prevent leakage.
-2. **Timestamp Validation:** The server validates the request timestamp `ts`. It is recommended that clients synchronize time with an NTP server. The allowed time deviation must be within 5 minutes.
-3. **UUID Uniqueness:** Each request must generate a unique `uuid` to avoid business exceptions caused by duplicate requests.
-4. **Signature Integrity:** Ensure that the signature algorithm implementation strictly follows this specification; otherwise, authentication will fail.
+1. Please complete the following Google Form [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1) to request your SecretID and SecretKey. 
+2. Once approved, you will receive an email containing the following details:
+
+   | Credential | Example | Description |
+   |---|---|---|
+   | `channel` | `AAAA` | Project name of the requester |
+   | `secret_id` | `SSSSSS` | Unique project identifier |
+   | `secret_key` | `CCCCCCCC` | Signature key (**must be kept secure**) |
+
+
+3. **Test Credentials** (for integration testing only, subject to QPS limits):
+
+| Field | Value |
+|---|---|
+| `channel` | `test` |
+| `secret_id` | `TEST` |
+| `secret_key` | `TESTTESTTEST` |
+
+| Environment | Domain |
+|---|---|
+| Mainnet | `api.walletadapter.org` |
+| Nile Testnet | `apinile.walletadapter.org` |
+
+
+### V. Security Considerations
+
+| Concern | Requirement |
+|---|---|
+| **Key Confidentiality** | The `secret_key` is sensitive information and must never be exposed in client-side code or public repositories |
+| **Timestamp Validation** | The server validates the `ts` parameter. Allowed deviation is **within 5 minutes**. Synchronize with an NTP server if needed |
+| **UUID Uniqueness** | Each request must use a unique `uuid` to prevent duplicate processing |
+| **Signature Integrity** | The signature algorithm must strictly follow this specification; any deviation will cause authentication failure |
 
 For technical support or key reset requests, please contact the official support team.
 
