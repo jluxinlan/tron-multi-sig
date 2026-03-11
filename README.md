@@ -726,7 +726,7 @@ Content-Type: application/json
 }
 ```
 
-### III. API Request Signature (`sign`) Generation Rules
+### III. API Request Signature Generation Rules
 
 #### Step 1: Sort and Concatenate Parameters
    Sort all common request parameters (excluding `sign`) in ascending ASCII order by field name, then concatenate them into a `key=value` string joined by `&`.
@@ -804,7 +804,7 @@ const sign = generateSign('GET', '/multi/auth', {
 ```
 
 
-### IV. Key (`secret_id` / `secret_key`) Application Process
+### IV. Key Application Process
 
 1. Please complete the following Google Form [Google Form link](https://docs.google.com/forms/d/e/1FAIpQLSc5EB1X8JN7LA4SAVAG99VziXEY6Kv6JxmlBry9rUBlwI-GaQ/viewform?pli=1) to request your SecretID and SecretKey. 
 2. Once approved, you will receive an email containing the following details:
