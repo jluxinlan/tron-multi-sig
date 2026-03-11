@@ -198,7 +198,7 @@ ws.on('error', (err) => {
 
 ---
 
-## API List
+## API Reference
 
 > **All APIs require authentication. Refer to [API Authentication Specification](#api-authentication-specification) for authentication details.**
 
