@@ -259,6 +259,7 @@ Returns an array of objects, each representing an `owner_address` that the queri
 
 <details>
 <summary><b>Response Example</b></summary>
+
 ```json
 {
   "code": 0,
@@ -320,7 +321,9 @@ Returns an array of objects, each representing an `owner_address` that the queri
   ]
 }
 ```
+
 </details>
+
 ---
 
 ### 2. Submit Multisignature Transaction
@@ -368,6 +371,7 @@ Returns an array of objects, each representing an `owner_address` that the queri
 
 <details>
 <summary><b>Request Example</b></summary>
+
 ```json
 {
   "address": "TE4CeJSjLmBsXQva3F1HXvAbdAP71Q2Ucw",
