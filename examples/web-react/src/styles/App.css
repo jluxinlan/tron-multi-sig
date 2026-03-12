@@ -1,0 +1,282 @@
+/* Global Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* Main App Container */
+.app {
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header > div {
+  text-align: left;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.header p {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Language Switcher */
+.language-switcher {
+  padding: 8px 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.language-switcher:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+/* Container */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Configuration Section */
+.config-section {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.config-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* Form Group */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+input:focus {
+  outline: none;
+  border-color: #666;
+}
+
+/* Action Buttons */
+.action-buttons {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Button */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  color: #333;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #333;
+  color: #fff;
+  border-color: #333;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #555;
+  border-color: #555;
+}
+
+.btn-success {
+  background: #28a745;
+  color: #fff;
+  border-color: #28a745;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #218838;
+  border-color: #218838;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: #fff;
+  border-color: #dc3545;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c82333;
+  border-color: #c82333;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* Result Section */
+.result-section {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-header h3,
+.section-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Result Box */
+.result-box {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.result-box h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-box pre {
+  background: #f8f8f8;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 12px;
+  overflow-x: auto;
+  line-height: 1.5;
+  font-family: 'Courier New', monospace;
+}
+
+/* Status Badge */
+.status {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* WebSocket Log */
+.ws-log {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ws-log-item {
+  padding: 4px 0;
+  border-left: 2px solid #666;
+  padding-left: 8px;
+  margin-bottom: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 16px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "app": {
+    "title": "TRON 多签服务 Demo",
+    "subtitle": "React + TypeScript 实现"
+  },
+  "config": {
+    "title": "配置信息",
+    "apiUrl": "API 地址",
+    "secretId": "Secret ID",
+    "secretKey": "Secret Key",
+    "channel": "Channel",
+    "testAddress": "测试地址",
+    "placeholders": {
+      "apiUrl": "https://niletest.tronlink.org",
+      "secretId": "your-secret-id",
+      "secretKey": "your-secret-key",
+      "channel": "your-channel",
+      "testAddress": "TRON地址"
+    }
+  },
+  "actions": {
+    "queryAuth": "查询权限",
+    "queryTransactions": "查询交易列表",
+    "connectWebSocket": "连接 WebSocket",
+    "disconnect": "断开连接"
+  },
+  "common": {
+    "clear": "清空",
+    "success": "成功",
+    "failed": "失败"
+  },
+  "results": {
+    "title": "结果显示"
+  },
+  "websocket": {
+    "title": "WebSocket 实时日志"
+  }
+}
