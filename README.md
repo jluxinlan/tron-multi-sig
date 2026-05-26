@@ -7,6 +7,7 @@
 - [Features](#features)
 - [Core Functions & Usage](#core-functions--usage)
 - [Multisignature Transaction Flow](#multisignature-transaction-flow)
+- [Data Conventions](#data-conventions)
 - [API Reference](#api-reference)
     - [Common Response Structure](#common-response-structure)
     - [Error Codes](#error-codes)
@@ -37,6 +38,13 @@ Developers can submit a pending on-chain transaction through this service. Based
 > **The TRON Multi-Signature Service does not custody, generate, or use private keys. It is positioned as a keyless multi-signature transaction orchestration hub.**
 
 > **Note:** This is a demo implementation, not a production-ready SDK. Use this as a reference only. For production, always keep your secrets on the backend.
+
+### When to use this service
+
+- **Use it** to: collect and validate signatures for a TRON multisig account, track signing progress, and have the service auto-broadcast once the on-chain weight threshold is met.
+- **Do not use it** to: generate or store private keys (the service never touches them — sign client-side), build single-signature transactions, or read general chain data (use a block explorer / node API instead).
+
+> **State-changing service.** Submitting a transaction is a **mutative** operation. Once the accumulated signature weight reaches the account threshold, the service **broadcasts an irreversible on-chain transaction that moves funds**. Treat `POST /multi/transaction` as a fund-moving action, not a read.
 
 ## Quick Start
 
@@ -107,31 +115,38 @@ The web demo provides a graphical interface to:
 ### 1. Initialize the Client
 
 ```ts
-import { MultiSigClient } from './src/services/MultiSigClient';
+import { MultiSigClient } from './src';
 
 const client = new MultiSigClient({
-  baseUrl: process.env.BASE_URL,
-  secretId: process.env.SECRET_ID,
-  secretKey: process.env.SECRET_KEY,
-  channel: process.env.CHANNEL,
+  baseURL: process.env.BASE_URL!,   // note: baseURL (capital URL)
+  secretId: process.env.SECRET_ID!,
+  secretKey: process.env.SECRET_KEY!,
+  channel: process.env.CHANNEL!,
 });
 ```
 
 ### 2. Query Address Permissions
 
 ```ts
-const permissions = await client.getAddressPermission(process.env.TEST_ADDRESS);
-console.log('Permission Info:', permissions);
+// Returns { code, message, data: AddressAuth[] }. An empty data array means
+// the address controls no multisig accounts — this is success, not an error.
+const auth = await client.queryAuth(process.env.TEST_ADDRESS!);
+console.log('Permission Info:', auth.data);
 ```
 
 ### 3. Submit Multisignature Transaction
 
 ```ts
+// State-changing: when total signature weight reaches the account threshold,
+// the service broadcasts the transaction on-chain (irreversible).
+// `transaction` must be a TRON transaction already signed client-side.
 const txResult = await client.submitTransaction({
-  from: process.env.TEST_ADDRESS,
-  to: 'Txxxxxxx',
-  amount: 1000000,
-  memo: 'Test transfer'
+  address: process.env.TEST_ADDRESS!,        // the signer's address (who produced this signature)
+  function_selector: 'transfer(address,uint256)', // required for TriggerSmartContract
+  transaction: {
+    raw_data: { /* ...TRON raw_data... */ },
+    signature: ['<hex-encoded-signature>'],
+  },
 });
 console.log('Transaction Result:', txResult);
 ```
@@ -139,22 +154,35 @@ console.log('Transaction Result:', txResult);
 ### 4. Query Transaction List
 
 ```ts
-const txList = await client.getTransactionList(process.env.TEST_ADDRESS, { limit: 10 });
-console.log('Transaction List:', txList);
+// state: 0 processing | 1 success | 2 failure | 255 all (filter only).
+// start/limit are required; limit max is 100.
+const txList = await client.queryTransactionList({
+  address: process.env.TEST_ADDRESS!,
+  start: 0,
+  limit: 10,
+  state: 255,
+});
+console.log('Total:', txList.data.total, 'Page count:', txList.data.data.length);
 ```
 
 ### 5. WebSocket Real-Time Monitoring
 
 ```ts
-const ws = client.createWebSocket(process.env.TEST_ADDRESS);
+import { TransactionDetail } from './src';
 
-ws.on('pending', (tx) => {
-  console.log('Pending Transaction:', tx);
+// connectWebSocket resolves once connected and subscribed.
+await client.connectWebSocket(process.env.TEST_ADDRESS!);
+
+// Callback receives either the initial array of pending txs or a single update object.
+client.onPendingTransaction((txs: TransactionDetail | TransactionDetail[]) => {
+  const list = Array.isArray(txs) ? txs : [txs];
+  for (const tx of list) {
+    console.log('Pending Transaction:', tx.hash, `${tx.current_weight}/${tx.threshold}`);
+  }
 });
 
-ws.on('error', (err) => {
-  console.error('WebSocket Error:', err);
-});
+// Send {"type":"ping"} at < 60s intervals to keep alive; call disconnect() to close.
+// client.disconnect();
 ```
 
 ---
@@ -198,6 +226,42 @@ ws.on('error', (err) => {
 
 ---
 
+## Data Conventions
+
+These conventions apply to **all** endpoints and examples below. They exist because the most common AI-agent failures with this API are unit and encoding misreads.
+
+### Amounts (SUN)
+
+- TRX amounts (`amount` in a `TransferContract`, `fee_limit`, staking amounts) are integers in **SUN**, the base unit. **1 TRX = 1,000,000 SUN** (`decimals = 6`).
+  - Display value = `raw / 1e6`. Example: `amount: 12000000` → **12 TRX**; `amount: 1000000` → **1 TRX**; `fee_limit: 225000000` → **225 TRX** cap.
+- TRC20 / token amounts are **not** in SUN. For `TriggerSmartContract` they are ABI-encoded inside `contract_data.data` (hex) and must be scaled by that token's own `decimals`.
+- Amounts can exceed `2^53` and lose precision as a JS `number`. Treat raw amounts as **strings / BigInt** when computing.
+
+### Timestamps
+
+| Field | Unit |
+|---|---|
+| `ts` (auth), `raw_data.expiration`, `raw_data.timestamp` | **Unix milliseconds** |
+| `sign_time` (signature progress) | **Unix seconds** |
+| `expire_time` (transaction detail) | Server-provided marker; `0` = not set. For the authoritative deadline use `raw_data.expiration` (ms) in `current_transaction`. |
+
+### Addresses (two encodings)
+
+The same address appears in **two encodings** depending on location — normalize before comparing.
+
+| Encoding | Looks like | Where it appears |
+|---|---|---|
+| Base58Check | `T…` (34 chars) | API query params; top-level fields (`originator_address`, `to_address`, signer `address`) |
+| Hex | `41…` (42 chars) | inside `raw_data.contract[].parameter.value` (`owner_address`, `to_address`, `contract_address`) |
+
+> The `41…` Hex form and the `T…` Base58 form encode the **same** address. Comparing a `T…` request value against a `41…` response value as raw strings will wrongly report "not equal".
+
+### Empty results are not errors
+
+A successful response (`code: 0`) with an **empty array** is a valid, non-error result — do not retry it as a failure. For example, `GET /multi/auth` returns `data: []` for an address that controls no multisig accounts, and `GET /multi/list` returns `data.data: []` with `total: 0` when nothing matches the filter.
+
+---
+
 ## API Reference
 
 > **All APIs require authentication. Refer to [API Authentication Specification](#api-authentication-specification) for authentication details.**
@@ -228,6 +292,8 @@ All REST API responses follow this structure:
 
 > **Note:** The error codes above are representative examples. Please refer to the actual API response for the specific error code and message in your integration.
 
+> **Empty ≠ error:** A `code: 0` response with an empty `data` array is **success**, not a failure — do not retry it. See [Data Conventions](#data-conventions).
+
 ---
 ### 1. Query Multisignature Authorization Details
 
@@ -241,20 +307,20 @@ All REST API responses follow this structure:
 
 > Plus all [Common Request Parameters](#i-common-request-parameters) for authentication.
 
-Returns an array of objects, each representing an `owner_address` that the queried address has permissions over:
+Returns an array of objects (`data`), each representing an `owner_address` that the queried address has permissions over. An **empty array means the address controls no multisig accounts** — success, not an error.
 
-| Field | Type | Description |
-|---|---|---|
-| `owner_address` | string | The account address that granted multisig permissions |
-| `owner_permission` | object \| null | Owner-level permission details (null if no owner permission) |
-| `active_permissions` | array | List of active permissions the queried address holds |
+| Field | Type | Presence | Description |
+|---|---|---|---|
+| `owner_address` | string | Always | The account address that granted multisig permissions (Base58, `T…`) |
+| `owner_permission` | object \| null | Nullable | Owner-level permission details; `null` if the queried address holds no owner permission |
+| `active_permissions` | array | Always | List of active permissions the queried address holds (may be empty) |
 
 **`active_permissions` Item:**
-| Field | Type | Description |
-|---|---|---|
-| `operations` | string | Hex-encoded bitmask of allowed contract types |
-| `threshold` | int | Total weight required to authorize a transaction |
-| `weight` | int | The queried address's weight in this permission group |
+| Field | Type | Presence | Description |
+|---|---|---|---|
+| `operations` | string | Always | Hex-encoded bitmask of allowed contract types |
+| `threshold` | int | Always | Total weight required to authorize a transaction |
+| `weight` | int | Always | The queried address's weight in this permission group |
 
 
 <details>
@@ -332,6 +398,8 @@ Returns an array of objects, each representing an `owner_address` that the queri
 
 **Description:** Submit a signed transaction to the multisignature service. Can be used both for initial submission and for adding subsequent signatures to a pending transaction.
 
+> ⚠️ **State-changing (mutative).** Each call adds a signature. When the accumulated weight reaches the account threshold, the service **broadcasts the transaction on-chain — irreversible and fund-moving**. This is not a read-only call. Replay protection relies on a unique `uuid` per request (see [Security Considerations](#v-security-considerations)).
+
 **Authentication:** Common request parameters are passed as **query string parameters** in the URL. See [How to Pass Authentication Parameters](#ii-how-to-pass-authentication-parameters).
 
 **Request Body (`application/json`):**
@@ -368,6 +436,8 @@ Returns an array of objects, each representing an `owner_address` that the queri
 | `type` | string | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
 | `parameter` | object | Contract parameters containing `value` and `type_url` |
 | `Permission_id` | int | The permission ID used for this transaction |
+
+> `parameter.value` fields are contract-type specific. For `TransferContract`: `amount` (**in SUN** — see [Data Conventions](#data-conventions)), `owner_address` and `to_address` (**Hex, `41…`**). For `TriggerSmartContract`: `data` (ABI-encoded call), `contract_address`, `owner_address` (all Hex). The same addresses appear as Base58 (`T…`) at the top level.
 
 <details>
 <summary><b>Request Example</b></summary>
@@ -456,42 +526,44 @@ If the connection drops, the client must reconnect.
 
 #### Push Data Fields
 
-| Field | Type | Description |
-|---|---|---|
-| `hash` | string | Transaction hash |
-| `contract_type` | string | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
-| `originator_address` | string | The address that initiated the transaction (`owner_address`) |
-| `expire_time` | long | Transaction expiration time (0 if not set) |
-| `threshold` | int | Required total signature weight |
-| `current_weight` | int | Currently accumulated signature weight |
-| `is_sign` | int | Whether the subscribed address has signed (`0` = unsigned, `1` = signed) |
-| `signature_progress` | array | Signature status for each participant (see below) |
-| `contract_data` | object | Decoded contract parameters |
-| `current_transaction` | object | The current transaction object (for signing) |
-| `state` | int | Transaction state (`0` = processing, `1` = success, `2` = failure) |
-| `function_selector` | string | Smart contract function selector (if applicable) |
+| Field | Type | Presence | Description | Unit/Encoding |
+|---|---|---|---|---|
+| `hash` | string | Always | Transaction hash | — |
+| `contract_type` | string | Always | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) | — |
+| `originator_address` | string | Always | The address that initiated the transaction (`owner_address`) | Base58 `T…` |
+| `expire_time` | long | Always | Expiration marker; `0` if not set. For the real deadline use `current_transaction.raw_data.expiration` | see [Data Conventions](#data-conventions) |
+| `threshold` | int | Always | Required total signature weight | weight units |
+| `current_weight` | int | Always | Currently accumulated signature weight | weight units |
+| `is_sign` | int | Always | Whether the subscribed address has signed (`0` = unsigned, `1` = signed) | — |
+| `signature_progress` | array | Always | Signature status for each participant (see below) | — |
+| `contract_data` | object | Always | Decoded contract parameters (fields vary by `contract_type`) | amounts in SUN / token decimals |
+| `current_transaction` | object | Always | The full signed transaction object (sign this) | — |
+| `state` | int | Always | Transaction state (`0` = processing, `1` = success, `2` = failure) | — |
+| `function_selector` | string | Conditional | Smart contract function selector; present for `TriggerSmartContract` | — |
 
 **`signature_progress` Item:**
 
-| Field | Type | Description |
-|---|---|---|
-| `address` | string | Participant's TRON address |
-| `weight` | int | This participant's signature weight |
-| `is_sign` | int | Whether this participant has signed (`0` = no, `1` = yes) |
-| `sign_time` | long | Signing timestamp in seconds (`0` if not yet signed) |
+| Field | Type | Presence | Description | Unit/Encoding |
+|---|---|---|---|---|
+| `address` | string | Always | Participant's TRON address | Base58 `T…` |
+| `weight` | int | Always | This participant's signature weight | weight units |
+| `is_sign` | int | Always | Whether this participant has signed (`0` = no, `1` = yes) | — |
+| `sign_time` | long | Always | Signing timestamp; `0` if not yet signed | **Unix seconds** |
 
 
 <details>
 <summary><b>Push Example (JSON Array on initial subscription)</b></summary>
 
+The subscription message sent by the client (see Step 2):
+
 ```json
 {
-    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ", // Subscribe to pending transactions awaiting signature; subscribe to transaction status updates.
-    "version":"v1"
+    "address": "TW6omSrQ1ZK37SwSvTQD5Cnp2QbEX2zDVZ",
+    "version": "v1"
 }
 ```
 
-- **Push Example:**
+The server then responds with all currently pending transactions as a **JSON array**:
 
 ```json
 [
@@ -565,6 +637,8 @@ If the connection drops, the client must reconnect.
 ```
 </details>
 
+> **Reading this example:** `contract_data.amount: 1000000` = **1 TRX** (`1000000 / 1e6`). `current_weight: 2` of `threshold: 3` → one more weight needed before the service broadcasts. `sign_time: 1741858044` is **Unix seconds**; `expire_time: 0` is unset, so the real deadline is `raw_data.expiration: 1741944318000` (**Unix ms**). Inside `raw_data`, `parameter.value` is a hex-packed `41…` blob, not Base58.
+
 ---
 ### 4. Transaction List Query
 
@@ -586,11 +660,11 @@ If the connection drops, the client must reconnect.
 
 **Response `data` Field:**
 
-| Field | Type | Description |
-|---|---|---|
-| `total` | int | Total number of transactions matching the filter |
-| `range_total` | int | Total number of transactions across all states for this address |
-| `data` | array | Array of transaction objects (same structure as [WebSocket Push Data](#push-data-fields)) |
+| Field | Type | Presence | Description |
+|---|---|---|---|
+| `total` | int | Always | Total number of transactions matching the filter (use for pagination) |
+| `range_total` | int | Always | Total number of transactions across all states for this address |
+| `data` | array | Always | Array of transaction objects, same structure as [WebSocket Push Data](#push-data-fields). May be empty (`total: 0`) — an empty list is success, not an error |
 
 
 <details>
@@ -692,6 +766,8 @@ If the connection drops, the client must reconnect.
 ```
 
 </details>
+
+> **Reading this example:** this is a `TriggerSmartContract` (TRC20 transfer), so the token amount is **not** a plain field — it is ABI-encoded in `contract_data.data`. The trailing `…0754d4c0` decodes to `123000000` raw; divide by the **token's own `decimals`** for the display amount (not SUN). `fee_limit: 225000000` = **225 TRX** cap. `current_weight: 4` of `threshold: 10` → not yet broadcastable. `contract_data` holds Base58 (`T…`) addresses while `raw_data…parameter.value` holds Hex (`41…`) — same accounts, different encoding.
 
 ---
 
