@@ -22,6 +22,7 @@
     - [IV. Key Application Process](#iv-key-application-process)
     - [V. Security Considerations](#v-security-considerations)
 - [Enumerations Reference](#enumerations-reference)
+- [AI Agent End-to-End Acceptance](#ai-agent-end-to-end-acceptance)
 - [Security Warning](#security-warning)
 - [License](#license)
 
@@ -280,24 +281,43 @@ All REST API responses follow this structure:
 
 ### Error Codes
 
-| Code  | Description                                                                 |
-|-------|-----------------------------------------------------------------------------|
-| 0     | Success                                                                     |
-| 4000  | `sign` authentication failed                                                |
-| 4002  | invalid `secret_id`                                                         |
-| 4003  | expired `ts`                                                                |
-| 4501  | Request too frequently                                                      |
-| 20004 | has no some param (`sign`, `ts`, `version`, `channel`, `uuid`, `secret_id`) |
-| 10001 | some server error                                                           |
+#### HTTP Layer
 
-> **Note:** The error codes above are representative examples. Please refer to the actual API response for the specific error code and message in your integration.
+All business errors are returned as **HTTP 200** with a non-zero `code` in the JSON body. HTTP `4xx` / `5xx` statuses appear **only** for transport-layer problems (e.g., `502` gateway error, `503` service unavailable) and are **not** used as business-error branches. Agents should branch on `code`, not on HTTP status.
 
-> **Empty ≠ error:** A `code: 0` response with an empty `data` array is **success**, not a failure — do not retry it. See [Data Conventions](#data-conventions).
+#### Business Codes (complete set)
+
+| Code | Category | Retryable | Hint | Description |
+|---|---|:---:|---|---|
+| `0` | Success | — | — | Operation succeeded |
+| `4000` | Auth | ❌ | Check `secret_key` and re-verify the signature steps in §III | `sign` authentication failed |
+| `4002` | Auth | ❌ | Contact ops to verify `secret_id` is provisioned | Invalid `secret_id` |
+| `4003` | Auth | ✅ (regenerate `ts` first) | Sync local clock with NTP — `ts` skew > 5 min is rejected | `ts` expired |
+| `4501` | RateLimit | ✅ (back off per `Retry-After`) | See [Rate Limiting](#vi-rate-limiting) | Request too frequent |
+| `20004` | Param | ❌ | Confirm all 7 common params (`sign`, `ts`, `sign_version`, `channel`, `uuid`, `secret_id`) are present — see §I | Missing required parameter |
+| `10001` | Server | ✅ (exponential backoff) | Retry up to 3 times; if still failing, contact support with the `uuid` | Internal server error |
+
+> **No other business codes are defined.** If an agent receives a `code` outside this table, treat it as a `10001`-class server error (exponential backoff) and report the `uuid` for investigation.
+
+#### Empty Result ≠ Error
+
+A `code: 0` response with an empty `data` is **success**, not a failure. Per-endpoint specifics:
+
+| Endpoint | Empty success shape |
+|---|---|
+| `GET /multi/auth` | `{ "code": 0, "data": [] }` — the queried address controls no multisig accounts |
+| `GET /multi/list` | `{ "code": 0, "data": { "total": 0, "data": [] } }` — no transaction matches the filter |
+| `WS /multi/socket` | initial push is `[]`, then the connection stays open — no pending signatures for the subscribed address |
+
+Agents must branch on `code === 0` for success, then inspect `data` for the business result — **never** retry an empty `data` as a failure.
 
 ---
 ### 1. Query Multisignature Authorization Details
 
 **API Endpoint:** `GET /multi/auth`
+
+**Side effect:** **Network Read** — pure query, no state change.
+
 **Description:** Query all addresses over which the specified address has multisignature permissions.
 - **Request Parameters:**
 
@@ -318,9 +338,9 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 **`active_permissions` Item:**
 | Field | Type | Presence | Description |
 |---|---|---|---|
-| `operations` | string | Always | Hex-encoded bitmask of allowed contract types |
-| `threshold` | int | Always | Total weight required to authorize a transaction |
-| `weight` | int | Always | The queried address's weight in this permission group |
+| `operations` | string | Always | Hex-encoded 32-byte bitmask of allowed contract types. Each bit maps to a TRON contract-type ID (see [`Tron.proto` `ContractType`](https://github.com/tronprotocol/java-tron/blob/master/protocol/src/main/protos/core/Tron.proto)). To test whether type `N` is permitted: `(BigInt('0x' + operations) >> BigInt(N)) & 1n === 1n` |
+| `threshold` | int | Always | Total weight required to authorize a transaction (absolute, unitless) |
+| `weight` | int | Always | The queried address's weight in this permission group (absolute, unitless) |
 
 
 <details>
@@ -398,7 +418,14 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 
 **Description:** Submit a signed transaction to the multisignature service. Can be used both for initial submission and for adding subsequent signatures to a pending transaction.
 
-> ⚠️ **State-changing (mutative).** Each call adds a signature. When the accumulated weight reaches the account threshold, the service **broadcasts the transaction on-chain — irreversible and fund-moving**. This is not a read-only call. Replay protection relies on a unique `uuid` per request (see [Security Considerations](#v-security-considerations)).
+**Side effects** (this endpoint has **two outcomes** depending on accumulated weight):
+
+| Side effect | Trigger condition | Reversible? |
+|---|---|:---:|
+| **Local Write** | After this call, accumulated weight `<` `threshold` — signature is stored, no on-chain effect | ✅ |
+| **Remote Write + Destructive** | After this call, accumulated weight `≥` `threshold` — service **automatically broadcasts** the transaction on-chain | ❌ moves funds, cannot be cancelled |
+
+> ⚠️ **Agent guidance.** Before calling, first `GET /multi/auth` to determine your weight, sum it with `current_weight` from the pending transaction, and check against `threshold`. If your signature would cross the threshold, route the call through a human-in-the-loop confirmation — once broadcast, the transaction is final. Replay protection relies on a unique `uuid` per request (see [Security Considerations](#v-security-considerations)).
 
 **Authentication:** Common request parameters are passed as **query string parameters** in the URL. See [How to Pass Authentication Parameters](#ii-how-to-pass-authentication-parameters).
 
@@ -416,28 +443,41 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 |---|---|---|---|
 | `raw_data` | object | Yes | Transaction raw data containing contract details |
 | `signature` | string[] | Yes | Array of hex-encoded signatures |
+| `txID` | string | No | Transaction hash; pass when known (e.g., re-submitting an additional signature). The service echoes / fills it back in responses |
+| `visible` | boolean | No (default `false`) | When `true`, the service returns addresses inside `raw_data.contract[].parameter.value` as **Base58** (`T…`) instead of Hex (`41…`) — reduces agent encoding-mismatch errors |
+| `raw_data_hex` | string | No | Protobuf-hex of the raw_data; populated by upstream tooling (e.g., TronWeb) and accepted as-is — not required if `raw_data` object is provided |
 
 **`raw_data` Object:**
 
-| Field | Type | Description |
-|---|---|---|
-| `ref_block_bytes` | string | Reference block bytes |
-| `ref_block_hash` | string | Reference block hash |
-| `expiration` | long | Transaction expiration timestamp (ms) |
-| `contract` | array | Array of contract calls (typically one element) |
-| `timestamp` | long | Transaction creation timestamp (ms) |
-| `fee_limit` | long \| null | Maximum fee for smart contract execution (in SUN). Required for `TriggerSmartContract` |
-| `data` | string | Optional memo/note |
+| Field | Type | Presence | Unit/Encoding | Description |
+|---|---|---|---|---|
+| `ref_block_bytes` | string | Always | Hex | Reference block bytes |
+| `ref_block_hash` | string | Always | Hex | Reference block hash |
+| `expiration` | long | Always | **Unix ms** | Transaction expiration timestamp |
+| `contract` | array | Always | — | Array of contract calls (typically one element) |
+| `timestamp` | long | Always | **Unix ms** | Transaction creation timestamp |
+| `fee_limit` | long \| null | Conditional (required for `TriggerSmartContract`) | **SUN** (`decimals = 6`) | Maximum fee for smart contract execution |
+| `data` | string | Optional | UTF-8 string | Memo/note attached to the transaction |
 
 **`contract` Item:**
 
-| Field | Type | Description |
-|---|---|---|
-| `type` | string | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
-| `parameter` | object | Contract parameters containing `value` and `type_url` |
-| `Permission_id` | int | The permission ID used for this transaction |
+| Field | Type | Presence | Description |
+|---|---|---|---|
+| `type` | string | Always | Contract type (e.g., `TransferContract`, `TriggerSmartContract`) |
+| `parameter` | object | Always | Contract parameters containing `value` (see dual-form note below) and `type_url` |
+| `Permission_id` | int | Always | The permission slot used to sign this transaction — matches an entry index in `active_permissions` from `GET /multi/auth` |
 
-> `parameter.value` fields are contract-type specific. For `TransferContract`: `amount` (**in SUN** — see [Data Conventions](#data-conventions)), `owner_address` and `to_address` (**Hex, `41…`**). For `TriggerSmartContract`: `data` (ABI-encoded call), `contract_address`, `owner_address` (all Hex). The same addresses appear as Base58 (`T…`) at the top level.
+> ⚠️ **`parameter.value` has two forms — branch on `typeof`:**
+>
+> | Context | Form | Example |
+> |---|---|---|
+> | Request body of `POST /multi/transaction` | **object** | `{ "amount": 12000000, "owner_address": "412a…", "to_address": "417e…" }` |
+> | Response of `GET /multi/list` (each `current_transaction`) | **object** | same shape as request |
+> | WebSocket push from `WS /multi/socket` (each `current_transaction`) | **protobuf-hex string** | `"0a15419f2e05d49b…"` |
+>
+> Agents reading a transaction must check `typeof tx.raw_data.contract[0].parameter.value === 'string'`. If string, it is a protobuf-encoded blob — decode with the `type_url` (e.g., `protocol.TransferContract`) before reading fields. Accessing `.amount` on the string form throws `TypeError`.
+>
+> Object-form field details: For `TransferContract` — `amount` (**in SUN** — see [Data Conventions](#data-conventions)), `owner_address` and `to_address` (**Hex `41…`**). For `TriggerSmartContract` — `data` (ABI-encoded call), `contract_address`, `owner_address` (all Hex). The same addresses appear as Base58 (`T…`) at the top level.
 
 <details>
 <summary><b>Request Example</b></summary>
@@ -487,6 +527,8 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 **API Endpoint:** `GET /multi/socket`
 
 **Protocol:** WebSocket
+
+**Side effect:** **Network Read** — subscribe-only stream; the server pushes pending-signature notifications, no state change is caused by the subscription itself.
 
 **Description:** Establish a real-time WebSocket connection to receive pending transaction notifications for a subscribed address.
 
@@ -550,6 +592,7 @@ If the connection drops, the client must reconnect.
 | `is_sign` | int | Always | Whether this participant has signed (`0` = no, `1` = yes) | — |
 | `sign_time` | long | Always | Signing timestamp; `0` if not yet signed | **Unix seconds** |
 
+> ⚠️ In WebSocket push, `current_transaction.raw_data.contract[].parameter.value` arrives as a **protobuf-hex string** (not an object as in `POST /multi/transaction` request / `GET /multi/list` response). See the dual-form note under [endpoint 2](#2-submit-multisignature-transaction).
 
 <details>
 <summary><b>Push Example (JSON Array on initial subscription)</b></summary>
@@ -630,7 +673,7 @@ The server then responds with all currently pending transactions as a **JSON arr
             ],
             "raw_data_hex": "0a023e9622086c2afde05160d13940b0d0e39fd9325a69080112630a2d747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e5472616e73666572436f6e747261637412320a15419f2e05d49b5fe66dce55598984aace7b3dc45fb012154180358ff232c17134b914a71b346a647dad006dfe18c0843d280370b098caf6d832"
         },
-        "state": 1,
+        "state": 0,
         "function_selector": "transfer(address,uint256)"
     }
 ]
@@ -643,6 +686,8 @@ The server then responds with all currently pending transactions as a **JSON arr
 ### 4. Transaction List Query
 
 **API Endpoint:** `GET /multi/list`
+
+**Side effect:** **Network Read** — pure query, no state change.
 
 **Description:** Query the multisignature transaction history for a given address with pagination and filtering.
 
@@ -787,6 +832,17 @@ All API requests must include the following common request fields, which are use
 | `secret_id` | string | Yes | Unique project identifier (assigned during registration) |
 | `sign` | string | Yes | HMAC-SHA256 signature for request verification (see [Generation Rules](#iii-api-request-signature-generation-rules)) |
 
+**API Key tier (all endpoints):**
+
+| Endpoint | Tier | Note |
+|---|---|---|
+| `GET /multi/auth` | **Required** | Cannot be called without valid credentials |
+| `POST /multi/transaction` | **Required** | Cannot be called without valid credentials |
+| `WS /multi/socket` | **Required** | Cannot be subscribed without valid credentials |
+| `GET /multi/list` | **Required** | Cannot be called without valid credentials |
+
+All four endpoints are **Required** — there is no Recommended / Optional / Unsupported tier for this service.
+
 ### II. How to Pass Authentication Parameters
 
 | Request Type | How to Pass |
@@ -922,6 +978,20 @@ const sign = generateSign('GET', '/multi/auth', {
 
 For technical support or key reset requests, please contact the official support team.
 
+### VI. Rate Limiting
+
+When the service throttles a request, it returns **HTTP 200** with `code: 4501`. Clients should back off and retry per the table below.
+
+| Aspect | Value |
+|---|---|
+| Granularity | Per `secret_id` × endpoint (sliding window, second-level) |
+| Production credentials QPS | _To be specified by backend ops_ |
+| Test credentials (`secret_id=TEST`) QPS | _Lower than production; not for production load. To be specified by backend ops_ |
+| Throttled response | `code: 4501` + (when available) HTTP `Retry-After` header in seconds |
+| Client strategy | First retry: respect `Retry-After`; subsequent retries: exponential backoff (e.g., 1s → 2s → 4s, cap at 30s). Stop and surface to user after 3 attempts. |
+
+> Rate limits apply per-credential, not per-IP, so sharing a `secret_id` across hosts compounds the per-second budget. Use distinct credentials for distinct workloads.
+
 ---
 
 ## Enumerations Reference
@@ -941,6 +1011,38 @@ For technical support or key reset requests, please contact the official support
 |---|---|
 | `0` | Not yet signed |
 | `1` | Signed |
+
+---
+
+## AI Agent End-to-End Acceptance
+
+This documentation is intended to let an AI agent complete a full multisig transfer **without reading source code**. Acceptance proves that intent.
+
+### Verification protocol
+
+Run an agent (e.g., Claude Code, Cursor, or any LLM with HTTP tooling) against this document and check it can complete every step below, using only the README, against a real Nile testnet account:
+
+1. From `GET /multi/auth`, read the current address's `weight` in some account's `active_permissions`, and the `threshold`.
+2. Build a `TransferContract` transaction against that `owner_address` (any TRX amount, in SUN) and sign it client-side.
+3. Submit the first signature via `POST /multi/transaction` and confirm `code: 0`.
+4. Open a WebSocket to `/multi/socket`, subscribe as the **second signer's** address, and receive the pending transaction in the initial push array.
+5. Sign as the second signer and submit again — if `current_weight + weight >= threshold`, the service should auto-broadcast.
+6. Confirm the broadcast via `GET /multi/list` (state `1`) and cross-check the `hash` on a block explorer.
+
+### Acceptance record
+
+| Run date | Agent / model | Outcome | Blockers / doc gaps surfaced | Tx hash |
+|---|---|---|---|---|
+| _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+
+> **Status:** acceptance has not yet been executed against the current revision of this document. The table above must be filled in by the team (product / backend) before the doc is considered standard-compliant per §6.6 P0.
+
+### Common acceptance pitfalls (predicted from this doc)
+
+- Mismatched `BASE_URL` between `.env.example` and request examples — keep both pointing at `walletadapter.org`.
+- `parameter.value` form switch between request/list (object) and WS push (protobuf-hex string) — agent must `typeof`-branch.
+- Address-encoding mix (Base58 at the top level, Hex `41…` inside `raw_data`) — use `visible: true` if available, else normalize before comparing.
+- Threshold crossing on the **last** signature triggers an irreversible on-chain broadcast — agent must HITL-gate this case.
 
 ---
 

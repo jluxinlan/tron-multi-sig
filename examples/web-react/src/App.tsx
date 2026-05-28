@@ -10,7 +10,7 @@ import { useMultiSigClient, ClientConfig } from './hooks/useMultiSigClient';
 export default function App() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<ClientConfig>({
-    baseURL: 'https://niletest.tronlink.org',
+    baseURL: 'https://apinile.walletadapter.org',
     secretId: '',
     secretKey: '',
     channel: '',

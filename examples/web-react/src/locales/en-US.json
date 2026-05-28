@@ -11,7 +11,7 @@
     "channel": "Channel",
     "testAddress": "Test Address",
     "placeholders": {
-      "apiUrl": "https://niletest.tronlink.org",
+      "apiUrl": "https://apinile.walletadapter.org",
       "secretId": "your-secret-id",
       "secretKey": "your-secret-key",
       "channel": "your-channel",
