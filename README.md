@@ -146,6 +146,8 @@ const txResult = await client.submitTransaction({
   function_selector: 'transfer(address,uint256)', // required for TriggerSmartContract
   transaction: {
     raw_data: { /* ...TRON raw_data... */ },
+    // Submit the FULL signature set: all previously collected signatures plus yours.
+    // To add a signature, read current_transaction.signature first, then append.
     signature: ['<hex-encoded-signature>'],
   },
 });
@@ -223,7 +225,7 @@ client.onPendingTransaction((txs: TransactionDetail | TransactionDetail[]) => {
    Establish a WebSocket connection via `/multi/socket` to listen in real time for pending signing tasks associated with the current address. This interface supports active message push, ensuring users are notified immediately of transactions requiring action.
 
 2. **Sign and Submit the Transaction**  
-   After signing, submit the transaction object again through `/multi/transaction`. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
+   After signing, submit the transaction object again through `/multi/transaction`. **Signatures are sent as the full set, not incrementally:** before submitting, take the existing `current_transaction.signature` array from the pending transaction (the WS push or `GET /multi/list`), append your newly produced signature, and POST the **complete** array. The multisignature service automatically verifies signature validity and weight, and broadcasts the transaction once the threshold is met. Developers can track transaction progress using the returned transaction hash.
 
 ---
 
@@ -256,6 +258,17 @@ The same address appears in **two encodings** depending on location — normaliz
 | Hex | `41…` (42 chars) | inside `raw_data.contract[].parameter.value` (`owner_address`, `to_address`, `contract_address`) |
 
 > The `41…` Hex form and the `T…` Base58 form encode the **same** address. Comparing a `T…` request value against a `41…` response value as raw strings will wrongly report "not equal".
+
+### The `data` field means different things by context
+
+The key `data` is overloaded across this API — disambiguate by its **path**, not its name:
+
+| Path | Meaning | Encoding |
+|---|---|---|
+| `raw_data.data` | Optional transaction memo/note | UTF-8 string |
+| `contract_data.data` / `parameter.value.data` (`TriggerSmartContract`) | ABI-encoded contract call (selector + args) | Hex |
+| top-level `data` (REST response envelope) | The response business payload | object \| array |
+| `data.data` (in `GET /multi/list`) | The array of transaction objects inside the payload | array |
 
 ### Empty results are not errors
 
@@ -294,10 +307,12 @@ All business errors are returned as **HTTP 200** with a non-zero `code` in the J
 | `4002` | Auth | ❌ | Contact ops to verify `secret_id` is provisioned | Invalid `secret_id` |
 | `4003` | Auth | ✅ (regenerate `ts` first) | Sync local clock with NTP — `ts` skew > 5 min is rejected | `ts` expired |
 | `4501` | RateLimit | ✅ (back off per `Retry-After`) | See [Rate Limiting](#vi-rate-limiting) | Request too frequent |
-| `20004` | Param | ❌ | Confirm all 7 common params (`sign`, `ts`, `sign_version`, `channel`, `uuid`, `secret_id`) are present — see §I | Missing required parameter |
+| `20004` | Param | ❌ | Confirm all 7 common params (`sign`, `ts`, `sign_version`, `address`, `channel`, `uuid`, `secret_id`) are present — see §I | Missing required parameter |
 | `10001` | Server | ✅ (exponential backoff) | Retry up to 3 times; if still failing, contact support with the `uuid` | Internal server error |
 
 > **No other business codes are defined.** If an agent receives a `code` outside this table, treat it as a `10001`-class server error (exponential backoff) and report the `uuid` for investigation.
+
+> **Code ranges (for orientation only):** `0` = success; `4xxx` = authentication / rate-limiting (caller credentials, signature, or throttling); `2xxxx` = request validation (malformed or missing parameters); `1xxxx` = server-side error. Branch on the **exact** `code`, not the range — the table above is the complete set.
 
 #### Empty Result ≠ Error
 
@@ -434,7 +449,7 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `address` | string | Yes | The signer's TRON Base58 address (the address that produced this signature) |
-| `function_selector` | string | No | The smart contract function being called (e.g., `transfer(address,uint256)`). Required for `TriggerSmartContract` type |
+| `function_selector` | string | Conditional | Required for `TriggerSmartContract` type; otherwise optional. The smart contract function being called (e.g., `transfer(address,uint256)`) |
 | `transaction` | object | Yes | The signed TRON transaction object (see below) |
 
 **`transaction` Object:**
@@ -442,7 +457,7 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `raw_data` | object | Yes | Transaction raw data containing contract details |
-| `signature` | string[] | Yes | Array of hex-encoded signatures |
+| `signature` | string[] | Yes | The **full** set of hex-encoded signatures collected so far — submit **all** of them every time, the previously collected signatures **plus** the one you just produced. The service stores/validates the array exactly as sent; it does **not** merge against prior submissions. To add a signature: read the current array from the pending transaction (`current_transaction.signature` in the WS push or `GET /multi/list`), append yours, then POST the complete array. Sending only the new signature drops the earlier ones |
 | `txID` | string | No | Transaction hash; pass when known (e.g., re-submitting an additional signature). The service echoes / fills it back in responses |
 | `visible` | boolean | No (default `false`) | When `true`, the service returns addresses inside `raw_data.contract[].parameter.value` as **Base58** (`T…`) instead of Hex (`41…`) — reduces agent encoding-mismatch errors |
 | `raw_data_hex` | string | No | Protobuf-hex of the raw_data; populated by upstream tooling (e.g., TronWeb) and accepted as-is — not required if `raw_data` object is provided |
@@ -452,12 +467,15 @@ Returns an array of objects (`data`), each representing an `owner_address` that 
 | Field | Type | Presence | Unit/Encoding | Description |
 |---|---|---|---|---|
 | `ref_block_bytes` | string | Always | Hex | Reference block bytes |
+| `ref_block_num` | long \| null | Optional | — | Reference block number; usually `null` (the service references the block via `ref_block_bytes` / `ref_block_hash`). Pass through unchanged as produced by your tx-building tool (e.g., TronWeb) |
 | `ref_block_hash` | string | Always | Hex | Reference block hash |
 | `expiration` | long | Always | **Unix ms** | Transaction expiration timestamp |
 | `contract` | array | Always | — | Array of contract calls (typically one element) |
 | `timestamp` | long | Always | **Unix ms** | Transaction creation timestamp |
 | `fee_limit` | long \| null | Conditional (required for `TriggerSmartContract`) | **SUN** (`decimals = 6`) | Maximum fee for smart contract execution |
 | `data` | string | Optional | UTF-8 string | Memo/note attached to the transaction |
+| `auths` | array \| null | Optional | — | Reserved; typically `null`. Pass through unchanged as produced by your tx-building tool |
+| `scripts` | string | Optional | — | Reserved; typically `""`. Pass through unchanged as produced by your tx-building tool |
 
 **`contract` Item:**
 
@@ -581,7 +599,7 @@ If the connection drops, the client must reconnect.
 | `contract_data` | object | Always | Decoded contract parameters (fields vary by `contract_type`) | amounts in SUN / token decimals |
 | `current_transaction` | object | Always | The full signed transaction object (sign this) | — |
 | `state` | int | Always | Transaction state (`0` = processing, `1` = success, `2` = failure) | — |
-| `function_selector` | string | Conditional | Smart contract function selector; present for `TriggerSmartContract` | — |
+| `function_selector` | string | Conditional | Smart contract function selector; required for `TriggerSmartContract` | — |
 
 **`signature_progress` Item:**
 
@@ -961,10 +979,7 @@ const sign = generateSign('GET', '/multi/auth', {
 | `secret_id` | `TEST` |
 | `secret_key` | `TESTTESTTEST` |
 
-| Environment | Domain |
-|---|---|
-| Mainnet | `api.walletadapter.org` |
-| Nile Testnet | `apinile.walletadapter.org` |
+Point `BASE_URL` at the environment you're testing — see the table in [Quick Start](#quick-start) (`apinile.walletadapter.org` for Nile testnet, `api.walletadapter.org` for mainnet).
 
 
 ### V. Security Considerations
@@ -1043,6 +1058,7 @@ Run an agent (e.g., Claude Code, Cursor, or any LLM with HTTP tooling) against t
 - `parameter.value` form switch between request/list (object) and WS push (protobuf-hex string) — agent must `typeof`-branch.
 - Address-encoding mix (Base58 at the top level, Hex `41…` inside `raw_data`) — use `visible: true` if available, else normalize before comparing.
 - Threshold crossing on the **last** signature triggers an irreversible on-chain broadcast — agent must HITL-gate this case.
+- `signature` is submitted as the **full** set each time, not incrementally — when adding a signature, read the pending transaction's existing `signature` array, append yours, and POST all of them. Sending only the newly produced signature drops the earlier ones.
 
 ---
 

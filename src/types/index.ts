@@ -130,7 +130,10 @@ export interface WebSocketSubscribe {
   version: string;
 }
 
-export type WebSocketMessage = TransactionDetail[];
+// The initial subscription reply is an array of pending transactions; each
+// subsequent push is a single updated transaction object. Matches the
+// onPendingTransaction callback signature.
+export type WebSocketMessage = TransactionDetail | TransactionDetail[];
 
 // ==================== Common Response Types ====================
 
